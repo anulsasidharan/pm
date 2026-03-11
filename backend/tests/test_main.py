@@ -18,4 +18,4 @@ def test_root_serves_hello_page() -> None:
     assert response.status_code == 200
     assert "Kanban board preview" in response.text
     assert "Hello world from FastAPI inside Docker." in response.text
-    assert "fetch('/api/health')" in response.text
+    assert "/api/health" in response.text

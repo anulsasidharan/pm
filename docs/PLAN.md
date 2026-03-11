@@ -88,15 +88,15 @@ Approved decisions:
 
 ### Tests
 
-- [ ] Frontend unit tests for board render and core component logic
-- [ ] Integration test verifies `/` loads Kanban board in container
-- [ ] Integration test verifies frontend + API coexist without route collisions
+- [x] Frontend unit tests for board render and core component logic
+- [x] Integration test verifies `/` loads Kanban board in container
+- [x] Integration test verifies frontend + API coexist without route collisions
 
 ### Success Criteria
 
-- [ ] Kanban board demo appears at `/`
-- [ ] API endpoints still reachable and unaffected
-- [ ] Unit coverage remains >= 80%
+- [x] Kanban board demo appears at `/`
+- [x] API endpoints still reachable and unaffected
+- [x] Unit coverage remains >= 80%
 
 ## Part 4: Fake Sign-In / Sign-Out Flow
 

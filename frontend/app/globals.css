@@ -72,6 +72,39 @@ body {
   border-radius: 8px;
   padding: 0.6rem;
   box-shadow: 0 2px 8px rgba(3, 33, 71, 0.07);
+  display: grid;
+  gap: 0.5rem;
+}
+
+.card p {
+  margin: 0;
+}
+
+.card button {
+  justify-self: start;
+  border: 1px solid #d6e9f8;
+  border-radius: 6px;
+  background: #fff;
+  color: var(--dark-navy);
+  padding: 0.25rem 0.55rem;
+  cursor: pointer;
+}
+
+.card-edit {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.card-edit input {
+  width: 100%;
+  border: 1px solid #bed8ef;
+  border-radius: 6px;
+  padding: 0.4rem 0.5rem;
+}
+
+.card-actions {
+  display: flex;
+  gap: 0.4rem;
 }
 
 @media (max-width: 860px) {
