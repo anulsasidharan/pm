@@ -2,6 +2,7 @@
 setlocal enabledelayedexpansion
 
 set "BASE_URL=http://localhost:8000"
+if "%PART2_STRICT_ROOT%"=="" set "PART2_STRICT_ROOT=0"
 
 echo [1/5] Checking containers...
 docker compose ps >nul 2>&1
@@ -33,9 +34,11 @@ if not "!STATUS!"=="200" (
 )
 
 echo [4/5] Checking root page content markers...
-for /f "delims=" %%i in ('powershell -NoProfile -Command "$c=(Invoke-WebRequest -Uri '%BASE_URL%/' -UseBasicParsing).Content; if($c -match 'Hello world from FastAPI inside Docker\.' -and $c -match "fetch\('/api/health'\)"){ 'ok' } else { exit 1 }"') do set "HTML_OK=%%i"
+for /f "delims=" %%i in ('powershell -NoProfile -Command "try { $c=(Invoke-WebRequest -Uri '%BASE_URL%/' -UseBasicParsing).Content; $isPart2=($c -match 'Hello world from FastAPI inside Docker\.' -and $c -match 'fetch\(''/api/health''\)'); $isPart3=($c -match '<html' -and $c -match '/_next/static/'); if('%PART2_STRICT_ROOT%' -eq '1'){ if($isPart2){ 'ok' } else { exit 1 } } else { if($isPart2 -or $isPart3){ 'ok' } else { exit 1 } } } catch { exit 1 }"') do set "HTML_OK=%%i"
 if %errorlevel% neq 0 (
   echo Root content validation failed.
+  if "%PART2_STRICT_ROOT%"=="1" echo Expected strict Part 2 hello page markers.
+  if not "%PART2_STRICT_ROOT%"=="1" echo Expected either Part 2 hello page markers or Part 3 Next.js markers.
   exit /b 1
 )
 if /i not "!HTML_OK!"=="ok" (
