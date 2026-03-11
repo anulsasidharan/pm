@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Project Management MVP</title>
+    <style>
+      :root {
+        --accent-yellow: #ecad0a;
+        --blue-primary: #209dd7;
+        --dark-navy: #032147;
+      }
+      body {
+        margin: 0;
+        font-family: Segoe UI, sans-serif;
+        color: var(--dark-navy);
+        background: #f7fbff;
+      }
+      main {
+        max-width: 1000px;
+        margin: 0 auto;
+        padding: 1rem;
+      }
+      h1 {
+        border-left: 6px solid var(--accent-yellow);
+        padding-left: 0.75rem;
+      }
+      .board {
+        display: grid;
+        gap: 0.75rem;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+      .column {
+        border: 1px solid #d6e9f8;
+        border-top: 5px solid var(--blue-primary);
+        background: #fff;
+        border-radius: 10px;
+        padding: 0.75rem;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Project Management MVP</h1>
+      <p>Kanban board preview</p>
+      <p>Hello world from FastAPI inside Docker.</p>
+      <p>Example check call: <code>fetch('/api/health')</code></p>
+      <section class="board" aria-label="Kanban board">
+        <article class="column"><h2>To Do</h2></article>
+        <article class="column"><h2>In Progress</h2></article>
+        <article class="column"><h2>Done</h2></article>
+      </section>
+    </main>
+  </body>
+</html>

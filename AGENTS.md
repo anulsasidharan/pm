@@ -25,7 +25,7 @@ For the MVP, this will run locally (in a docker container)
 - Use "uv" as the package manager for python in the Docker container
 - Use OpenRouter for the AI calls. An OPENROUTER_API_KEY is in .env in the project root
 - Use `openai/gpt-oss-120b` as the model
-- Use SQLLite local database for the database, creating a new db if it doesn't exist
+- Use SQLite local database, creating a new DB if it doesn't exist
 - Start and Stop server scripts for Mac, PC, Linux in scripts/
 
 ## Starting Point
@@ -46,6 +46,7 @@ A working MVP of the frontend has been built and is already in frontend. This is
 2. Keep it simple - NEVER over-engineer, ALWAYS simplify, NO unnecessary defensive programming. No extra features - focus on simplicity.
 3. Be concise. Keep README minimal. IMPORTANT: no emojis ever
 4. When hitting issues, always identify root cause before trying a fix. Do not guess. Prove with evidence, then fix the root cause.
+5. Require >= 80% unit test coverage and robust integration testing for major user flows.
 
 ## Working documentation
 
