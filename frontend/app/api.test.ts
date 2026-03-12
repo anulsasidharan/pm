@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 
-import { ApiError, fetchBoard, login, logout, saveBoard } from "./api";
+import { ApiError, fetchBoard, login, logout, saveBoard, sendAiChat } from "./api";
 
 function jsonResponse(status: number, payload: unknown): Response {
   return new Response(JSON.stringify(payload), {
@@ -67,6 +67,33 @@ describe("api client", () => {
       2,
       "/api/auth/logout",
       expect.objectContaining({ method: "POST" })
+    );
+  });
+
+  it("sends ai chat request with history and returns structured payload", async () => {
+    const mockFetch = vi.mocked(fetch);
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse(200, {
+        reply: "Done",
+        operation_type: "chat_only",
+        board: null
+      })
+    );
+
+    const history = [{ role: "assistant" as const, content: "hello" }];
+    await expect(sendAiChat("Add card", history)).resolves.toEqual({
+      reply: "Done",
+      operation_type: "chat_only",
+      board: null
+    });
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      "/api/ai/chat",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        body: JSON.stringify({ message: "Add card", history })
+      })
     );
   });
 });

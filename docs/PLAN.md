@@ -14,7 +14,7 @@
 
 Current status: Complete (approved on 2026-03-09)
 
-Progress update: Parts 1-8 complete (Part 5 approved on 2026-03-11, Part 6 completed on 2026-03-11, Part 7 completed on 2026-03-11, Part 8 completed on 2026-03-12)
+Progress update: Parts 1-10 complete (Part 5 approved on 2026-03-11, Part 6 completed on 2026-03-11, Part 7 completed on 2026-03-11, Part 8 completed on 2026-03-12, Part 9 completed on 2026-03-12, Part 10 completed on 2026-03-12)
 
 Approved decisions:
 
@@ -208,50 +208,50 @@ Approved decisions:
 
 ### Checklist
 
-- [ ] Define structured response schema:
-- [ ] Include assistant reply text
-- [ ] Include optional board update payload
-- [ ] Include structured operation type metadata
-- [ ] Send board JSON + user message + conversation history to model
-- [ ] Validate model response against schema before applying updates
-- [ ] Apply board updates atomically when present
+- [x] Define structured response schema:
+- [x] Include assistant reply text
+- [x] Include optional board update payload
+- [x] Include structured operation type metadata
+- [x] Send board JSON + user message + conversation history to model
+- [x] Validate model response against schema before applying updates
+- [x] Apply board updates atomically when present
 
 ### Tests
 
-- [ ] Unit tests for schema validation and parse failures
-- [ ] Unit tests for board mutation application logic
-- [ ] Integration tests for chat-only and chat+board-update responses
-- [ ] Integration tests for malformed model output fallback behavior
+- [x] Unit tests for schema validation and parse failures
+- [x] Unit tests for board mutation application logic
+- [x] Integration tests for chat-only and chat+board-update responses
+- [x] Integration tests for malformed model output fallback behavior
 
 ### Success Criteria
 
-- [ ] AI can respond without board changes
-- [ ] AI can return valid board updates that persist
-- [ ] Invalid model outputs are handled safely
-- [ ] Unit coverage remains meaningful for changed behavior (target ~80% when sensible)
+- [x] AI can respond without board changes
+- [x] AI can return valid board updates that persist
+- [x] Invalid model outputs are handled safely
+- [x] Unit coverage remains meaningful for changed behavior (target ~80% when sensible)
 
 ## Part 10: AI Sidebar UX in Frontend
 
 ### Checklist
 
-- [ ] Build sidebar chat UI integrated into Kanban view
-- [ ] Show message history and request state (loading/error)
-- [ ] Call backend AI endpoint with current board context
-- [ ] Apply returned board updates to UI state and persist them
-- [ ] Refresh or reconcile board state after AI mutation
+- [x] Build sidebar chat UI integrated into Kanban view
+- [x] Show message history and request state (loading/error)
+- [x] Call backend AI endpoint with current board context
+- [x] Apply returned board updates to UI state and persist them
+- [x] Refresh or reconcile board state after AI mutation
 
 ### Tests
 
-- [ ] Frontend unit tests for chat state reducer/store and render logic
-- [ ] Integration tests for user message -> AI response rendering
-- [ ] Integration tests for AI-triggered board update reflected in Kanban UI
-- [ ] Integration tests for error and retry behavior
+- [x] Frontend unit tests for chat state reducer/store and render logic
+- [x] Integration tests for user message -> AI response rendering
+- [x] Integration tests for AI-triggered board update reflected in Kanban UI
+- [x] Integration tests for error and retry behavior
 
 ### Success Criteria
 
-- [ ] Sidebar enables reliable chat with AI assistant
-- [ ] AI-updated board state appears automatically in UI
-- [ ] Unit coverage remains meaningful for changed behavior (target ~80% when sensible)
+- [x] Sidebar enables reliable chat with AI assistant
+- [x] AI-updated board state appears automatically in UI
+- [x] Unit coverage remains meaningful for changed behavior (target ~80% when sensible)
 
 ## Test Strategy Detail
 

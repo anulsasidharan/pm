@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import os
+from json import dumps
 from typing import Any
 
 import httpx
 
 OPENROUTER_MODEL = "openai/gpt-oss-120b"
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+AI_HISTORY_WINDOW = 20
 
 
 class AIConfigError(Exception):
@@ -78,6 +80,74 @@ def run_connectivity_check(prompt: str = "2+2") -> str:
     for attempt in range(2):
         try:
             with httpx.Client(timeout=10.0) as client:
+                response = client.post(OPENROUTER_URL, headers=headers, json=payload)
+        except httpx.RequestError as exc:
+            last_error = exc
+            if attempt == 0:
+                continue
+            raise AIUpstreamError("Unable to reach OpenRouter") from exc
+
+        if response.status_code >= 500 and attempt == 0:
+            continue
+
+        if response.status_code in (401, 403):
+            raise AIConfigError(_read_error_message(response))
+
+        if response.status_code >= 400:
+            raise AIUpstreamError(_read_error_message(response))
+
+        return _extract_text(response.json())
+
+    if last_error is not None:
+        raise AIUpstreamError("Unable to reach OpenRouter") from last_error
+
+    raise AIUpstreamError("OpenRouter call failed")
+
+
+def run_structured_board_chat(
+    board_json: dict[str, Any],
+    user_message: str,
+    history: list[dict[str, str]],
+) -> str:
+    api_key = os.getenv("OPENROUTER_API_KEY")
+    if not api_key:
+        raise AIConfigError("OPENROUTER_API_KEY is missing")
+
+    system_prompt = (
+        "You are a project management assistant for a Kanban board. "
+        "Always return STRICT JSON with this shape only: "
+        '{"reply":"string","operation_type":"chat_only|board_update","board":null|{"columns":[{"id":"string","name":"string","cards":[{"id":"string","title":"string"}]}]}}. '
+        "If no board changes are required, set operation_type to chat_only and board to null."
+    )
+
+    clipped_history = history[-AI_HISTORY_WINDOW:]
+    history_lines = [f"{item['role']}: {item['content']}" for item in clipped_history]
+    user_prompt = (
+        "Current board JSON:\n"
+        f"{dumps(board_json)}\n\n"
+        "Conversation history (latest first not required):\n"
+        f"{chr(10).join(history_lines) if history_lines else '(none)'}\n\n"
+        f"User message: {user_message}"
+    )
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": OPENROUTER_MODEL,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        "temperature": 0,
+        "max_tokens": 1200,
+    }
+
+    last_error: Exception | None = None
+    for attempt in range(2):
+        try:
+            with httpx.Client(timeout=15.0) as client:
                 response = client.post(OPENROUTER_URL, headers=headers, json=payload)
         except httpx.RequestError as exc:
             last_error = exc

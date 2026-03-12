@@ -2,7 +2,17 @@
 
 import React, { useEffect, useRef, useState } from "react";
 
-import { ApiError, type Card, type Column, fetchBoard, login, logout, saveBoard } from "./api";
+import {
+  ApiError,
+  type Card,
+  type ChatMessage,
+  type Column,
+  fetchBoard,
+  login,
+  logout,
+  saveBoard,
+  sendAiChat
+} from "./api";
 
 const DEFAULT_COLUMNS: Column[] = [
   { id: "todo", name: "To Do", cards: [] },
@@ -40,6 +50,10 @@ export default function HomePage() {
   const [draggingCardId, setDraggingCardId] = useState<string | null>(null);
   const [editingCardId, setEditingCardId] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState("");
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [isChatLoading, setIsChatLoading] = useState(false);
+  const [chatError, setChatError] = useState("");
   const pendingSaveCountRef = useRef(0);
   const saveQueueRef = useRef(Promise.resolve());
   const draggingCardIdRef = useRef<string | null>(null);
@@ -257,6 +271,52 @@ export default function HomePage() {
     }
   }
 
+  async function reconcileBoardState() {
+    try {
+      const latest = await fetchBoard();
+      setColumns(normalizeColumns(latest.columns));
+    } catch {
+      setBoardError("Unable to reconcile board after AI update.");
+    }
+  }
+
+  async function handleSendChat(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (isChatLoading) {
+      return;
+    }
+
+    const message = chatInput.trim();
+    if (!message) {
+      return;
+    }
+
+    setChatError("");
+    const nextHistory = [...chatMessages, { role: "user", content: message } satisfies ChatMessage];
+    setChatMessages(nextHistory);
+    setChatInput("");
+    setIsChatLoading(true);
+
+    try {
+      const response = await sendAiChat(message, chatMessages);
+      setChatMessages((prev) => [...prev, { role: "assistant", content: response.reply }]);
+
+      if (response.operation_type === "board_update" && response.board) {
+        const normalizedColumns = normalizeColumns(response.board.columns);
+        setColumns(normalizedColumns);
+        await reconcileBoardState();
+      }
+    } catch (error) {
+      if (error instanceof ApiError) {
+        setChatError(error.message);
+      } else {
+        setChatError("Chat request failed.");
+      }
+    } finally {
+      setIsChatLoading(false);
+    }
+  }
+
   async function handleLogin(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setAuthError("");
@@ -290,6 +350,10 @@ export default function HomePage() {
     setDraggingCardId(null);
     setEditingCardId(null);
     setEditingValue("");
+    setChatMessages([]);
+    setChatInput("");
+    setChatError("");
+    setIsChatLoading(false);
     setColumns(DEFAULT_COLUMNS);
     setIsSaving(false);
     pendingSaveCountRef.current = 0;
@@ -322,21 +386,12 @@ export default function HomePage() {
             {isSaving ? <p className="sub">Saving changes...</p> : null}
             {boardError ? <p className="error">{boardError}</p> : null}
           </div>
-          <section className="board" aria-label="Kanban board">
-            {columns.map((column) => (
-              <article
-                key={column.id}
-                className="column"
-                onDragOver={(event) => {
-                  event.preventDefault();
-                  if (event.dataTransfer) {
-                    event.dataTransfer.dropEffect = "move";
-                  }
-                }}
-                onDrop={(event) => handleColumnDrop(event, column.id, column.cards.length)}
-              >
-                <h2>{column.name}</h2>
-                <ul
+          <div className="workspace" aria-label="Kanban and AI workspace">
+            <section className="board" aria-label="Kanban board">
+              {columns.map((column) => (
+                <article
+                  key={column.id}
+                  className="column"
                   onDragOver={(event) => {
                     event.preventDefault();
                     if (event.dataTransfer) {
@@ -344,71 +399,107 @@ export default function HomePage() {
                     }
                   }}
                   onDrop={(event) => handleColumnDrop(event, column.id, column.cards.length)}
-                  aria-label={`${column.name} cards`}
                 >
-                  {column.cards.map((card, index) => (
-                    <li
-                      key={card.id}
-                      className="card"
-                      draggable
-                      onDragStart={(event) => {
-                        event.dataTransfer?.setData("text/plain", card.id);
-                        if (event.dataTransfer) {
-                          event.dataTransfer.effectAllowed = "move";
-                        }
-                        draggingCardIdRef.current = card.id;
-                        setDraggingCardId(card.id);
-                      }}
-                      onDragEnd={() => {
-                        draggingCardIdRef.current = null;
-                        setDraggingCardId(null);
-                      }}
-                      onDragOver={(event) => {
-                        event.preventDefault();
-                        if (event.dataTransfer) {
-                          event.dataTransfer.dropEffect = "move";
-                        }
-                      }}
-                      onDrop={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        handleCardDrop(event, column.id, index);
-                      }}
-                    >
-                      {editingCardId === card.id ? (
-                        <form
-                          className="card-edit"
-                          onSubmit={(event) => {
-                            event.preventDefault();
-                            saveEdit(card.id);
-                          }}
-                        >
-                          <input
-                            aria-label={`Edit ${card.title}`}
-                            value={editingValue}
-                            onChange={(event) => setEditingValue(event.target.value)}
-                          />
-                          <div className="card-actions">
-                            <button type="submit">Save</button>
-                            <button type="button" onClick={cancelEdit}>
-                              Cancel
+                  <h2>{column.name}</h2>
+                  <ul
+                    onDragOver={(event) => {
+                      event.preventDefault();
+                      if (event.dataTransfer) {
+                        event.dataTransfer.dropEffect = "move";
+                      }
+                    }}
+                    onDrop={(event) => handleColumnDrop(event, column.id, column.cards.length)}
+                    aria-label={`${column.name} cards`}
+                  >
+                    {column.cards.map((card, index) => (
+                      <li
+                        key={card.id}
+                        className="card"
+                        draggable
+                        onDragStart={(event) => {
+                          event.dataTransfer?.setData("text/plain", card.id);
+                          if (event.dataTransfer) {
+                            event.dataTransfer.effectAllowed = "move";
+                          }
+                          draggingCardIdRef.current = card.id;
+                          setDraggingCardId(card.id);
+                        }}
+                        onDragEnd={() => {
+                          draggingCardIdRef.current = null;
+                          setDraggingCardId(null);
+                        }}
+                        onDragOver={(event) => {
+                          event.preventDefault();
+                          if (event.dataTransfer) {
+                            event.dataTransfer.dropEffect = "move";
+                          }
+                        }}
+                        onDrop={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          handleCardDrop(event, column.id, index);
+                        }}
+                      >
+                        {editingCardId === card.id ? (
+                          <form
+                            className="card-edit"
+                            onSubmit={(event) => {
+                              event.preventDefault();
+                              saveEdit(card.id);
+                            }}
+                          >
+                            <input
+                              aria-label={`Edit ${card.title}`}
+                              value={editingValue}
+                              onChange={(event) => setEditingValue(event.target.value)}
+                            />
+                            <div className="card-actions">
+                              <button type="submit">Save</button>
+                              <button type="button" onClick={cancelEdit}>
+                                Cancel
+                              </button>
+                            </div>
+                          </form>
+                        ) : (
+                          <>
+                            <p>{card.title}</p>
+                            <button type="button" onClick={() => startEdit(card)}>
+                              Edit
                             </button>
-                          </div>
-                        </form>
-                      ) : (
-                        <>
-                          <p>{card.title}</p>
-                          <button type="button" onClick={() => startEdit(card)}>
-                            Edit
-                          </button>
-                        </>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </article>
-            ))}
-          </section>
+                          </>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </article>
+              ))}
+            </section>
+
+            <aside className="ai-sidebar" aria-label="AI assistant sidebar">
+              <h2>AI Assistant</h2>
+              <div className="chat-history" aria-label="Chat history">
+                {chatMessages.length === 0 ? <p className="sub">Ask AI to create, edit, or move cards.</p> : null}
+                {chatMessages.map((message, index) => (
+                  <p key={`${message.role}-${index}`} className={`chat-msg ${message.role}`}>
+                    <strong>{message.role === "user" ? "You" : "AI"}:</strong> {message.content}
+                  </p>
+                ))}
+              </div>
+              {chatError ? <p className="error">{chatError}</p> : null}
+              <form className="chat-form" onSubmit={(event) => void handleSendChat(event)}>
+                <textarea
+                  aria-label="AI message"
+                  value={chatInput}
+                  onChange={(event) => setChatInput(event.target.value)}
+                  placeholder="e.g. Move 'Review API contract' to Done"
+                  rows={4}
+                />
+                <button type="submit" className="primary" disabled={isChatLoading}>
+                  {isChatLoading ? "Sending..." : "Send"}
+                </button>
+              </form>
+            </aside>
+          </div>
         </>
       ) : (
         <section className="login" aria-label="Sign in form">

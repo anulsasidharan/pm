@@ -13,6 +13,17 @@ export type Board = {
   columns: Column[];
 };
 
+export type ChatMessage = {
+  role: "user" | "assistant";
+  content: string;
+};
+
+export type AiChatResponse = {
+  reply: string;
+  operation_type: "chat_only" | "board_update" | "fallback_invalid_output";
+  board: Board | null;
+};
+
 type BoardEnvelope = {
   board: Board;
 };
@@ -91,4 +102,11 @@ export async function saveBoard(board: Board): Promise<Board> {
     body: JSON.stringify({ board })
   });
   return response.board;
+}
+
+export async function sendAiChat(message: string, history: ChatMessage[]): Promise<AiChatResponse> {
+  return request<AiChatResponse>("/api/ai/chat", {
+    method: "POST",
+    body: JSON.stringify({ message, history })
+  });
 }

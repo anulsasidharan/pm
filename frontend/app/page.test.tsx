@@ -18,6 +18,8 @@ type MockServer = {
   setFailNextPut: () => void;
   getBoard: () => { columns: Column[] };
   seedBoard: (nextBoard: { columns: Column[] }) => void;
+  setAiFailureOnce: (message: string) => void;
+  setNextAiBoardUpdate: (nextBoard: { columns: Column[] }, reply?: string) => void;
 };
 
 function jsonResponse(status: number, payload: unknown): Response {
@@ -52,6 +54,8 @@ function createMockServer(): MockServer {
       }
     ]
   };
+  let aiFailureMessage: string | null = null;
+  let nextAiBoardUpdate: { board: { columns: Column[] }; reply: string } | null = null;
 
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === "string" ? input : input.toString();
@@ -95,6 +99,35 @@ function createMockServer(): MockServer {
       return jsonResponse(200, { status: "ok" });
     }
 
+    if (url === "/api/ai/chat" && method === "POST") {
+      if (!isLoggedIn) {
+        return jsonResponse(401, { detail: "Authentication required" });
+      }
+
+      if (aiFailureMessage) {
+        const message = aiFailureMessage;
+        aiFailureMessage = null;
+        return jsonResponse(502, { detail: message });
+      }
+
+      if (nextAiBoardUpdate) {
+        board = nextAiBoardUpdate.board;
+        const reply = nextAiBoardUpdate.reply;
+        nextAiBoardUpdate = null;
+        return jsonResponse(200, {
+          reply,
+          operation_type: "board_update",
+          board
+        });
+      }
+
+      return jsonResponse(200, {
+        reply: "Acknowledged",
+        operation_type: "chat_only",
+        board: null
+      });
+    }
+
     return jsonResponse(404, { detail: "not found" });
   }));
 
@@ -107,6 +140,12 @@ function createMockServer(): MockServer {
     },
     seedBoard(nextBoard) {
       board = nextBoard;
+    },
+    setAiFailureOnce(message) {
+      aiFailureMessage = message;
+    },
+    setNextAiBoardUpdate(nextBoard, reply = "Board updated") {
+      nextAiBoardUpdate = { board: nextBoard, reply };
     }
   };
 }
@@ -233,5 +272,62 @@ describe("HomePage", () => {
     expect(screen.getByRole("heading", { level: 2, name: "In Progress" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 2, name: "Done" })).toBeInTheDocument();
     expect(screen.getByText("Only one")).toBeInTheDocument();
+  });
+
+  it("renders AI chat messages from user and assistant", async () => {
+    render(<HomePage />);
+    await loginAsDefaultUser();
+
+    fireEvent.change(screen.getByLabelText("AI message"), {
+      target: { value: "Summarize board" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await screen.findByText(/You:/);
+    await screen.findByText(/AI:/);
+    expect(screen.getByText(/Summarize board/)).toBeInTheDocument();
+    expect(screen.getByText(/Acknowledged/)).toBeInTheDocument();
+  });
+
+  it("applies AI-triggered board updates to the UI", async () => {
+    server.setNextAiBoardUpdate(
+      {
+        columns: [
+          {
+            id: "todo",
+            name: "To Do",
+            cards: [{ id: "c99", title: "AI created task" }]
+          },
+          { id: "in-progress", name: "In Progress", cards: [] },
+          { id: "done", name: "Done", cards: [] }
+        ]
+      },
+      "Added AI card"
+    );
+
+    render(<HomePage />);
+    await loginAsDefaultUser();
+
+    fireEvent.change(screen.getByLabelText("AI message"), {
+      target: { value: "Add a task" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await screen.findByText("Added AI card");
+    expect(screen.getByText("AI created task")).toBeInTheDocument();
+  });
+
+  it("shows chat error when AI endpoint fails", async () => {
+    server.setAiFailureOnce("upstream unavailable");
+
+    render(<HomePage />);
+    await loginAsDefaultUser();
+
+    fireEvent.change(screen.getByLabelText("AI message"), {
+      target: { value: "Try update" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await screen.findByText("upstream unavailable");
   });
 });
