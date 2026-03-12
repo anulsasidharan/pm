@@ -1,11 +1,18 @@
+import json
 from pathlib import Path
 from typing import AsyncIterator
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, HTTPException, Response, status
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 
-from app.db import initialize_database
+from app.auth import clear_session_cookie, require_authenticated_username, set_session_cookie
+from app.db import get_board_json, initialize_database, save_board_json
+from app.schemas import Board, BoardResponse, BoardUpdateRequest, LoginRequest
+
+HARDCODED_USER = "user"
+HARDCODED_PASSWORD = "password"
+DEFAULT_BOARD = Board(columns=[])
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -19,6 +26,51 @@ app = FastAPI(title="Project Management MVP API", lifespan=lifespan)
 @app.get("/api/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.post("/api/auth/login")
+def login(payload: LoginRequest, response: Response) -> dict[str, str]:
+    if payload.username != HARDCODED_USER or payload.password != HARDCODED_PASSWORD:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid username or password",
+        )
+
+    set_session_cookie(response, payload.username)
+    return {"status": "ok"}
+
+
+@app.post("/api/auth/logout")
+def logout(response: Response) -> dict[str, str]:
+    clear_session_cookie(response)
+    return {"status": "ok"}
+
+
+@app.get("/api/board", response_model=BoardResponse)
+def get_board(username: str = Depends(require_authenticated_username)) -> BoardResponse:
+    stored = get_board_json(username)
+    if stored is None:
+        return BoardResponse(board=DEFAULT_BOARD)
+
+    try:
+        board = Board.model_validate_json(stored)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Stored board data is invalid",
+        ) from exc
+
+    return BoardResponse(board=board)
+
+
+@app.put("/api/board", response_model=BoardResponse)
+def update_board(
+    payload: BoardUpdateRequest,
+    username: str = Depends(require_authenticated_username),
+) -> BoardResponse:
+    # Persist validated board payload for the signed-in user.
+    save_board_json(username, json.dumps(payload.board.model_dump()))
+    return BoardResponse(board=payload.board)
 
 
 static_dir = Path(__file__).resolve().parent / "static"
