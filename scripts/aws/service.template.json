@@ -1,0 +1,32 @@
+{
+  "cluster": "pm-cluster",
+  "serviceName": "pm-app-svc",
+  "taskDefinition": "pm-app-task",
+  "desiredCount": 1,
+  "launchType": "FARGATE",
+  "platformVersion": "LATEST",
+  "enableExecuteCommand": true,
+  "deploymentConfiguration": {
+    "maximumPercent": 200,
+    "minimumHealthyPercent": 50
+  },
+  "networkConfiguration": {
+    "awsvpcConfiguration": {
+      "assignPublicIp": "DISABLED",
+      "securityGroups": [
+        "sg-ecsxxxxxxxx"
+      ],
+      "subnets": [
+        "subnet-priv-a",
+        "subnet-priv-b"
+      ]
+    }
+  },
+  "loadBalancers": [
+    {
+      "targetGroupArn": "arn:aws:elasticloadbalancing:<region>:<account-id>:targetgroup/pm-app-tg/xxxxxxxx",
+      "containerName": "pm-app",
+      "containerPort": 8000
+    }
+  ]
+}

@@ -1,0 +1,67 @@
+{
+  "family": "pm-app-task",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::<account-id>:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::<account-id>:role/pmAppTaskRole",
+  "containerDefinitions": [
+    {
+      "name": "pm-app",
+      "image": "<account-id>.dkr.ecr.<region>.amazonaws.com/pm-app:v1",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 8000,
+          "hostPort": 8000,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        {
+          "name": "PYTHONUNBUFFERED",
+          "value": "1"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "OPENROUTER_API_KEY",
+          "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:pm/openrouter_api_key-xxxx"
+        },
+        {
+          "name": "PM_SESSION_SECRET",
+          "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:pm/session_secret-xxxx"
+        }
+      ],
+      "mountPoints": [
+        {
+          "sourceVolume": "pm-data",
+          "containerPath": "/app/data",
+          "readOnly": false
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/pm-app",
+          "awslogs-region": "<region>",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ],
+  "volumes": [
+    {
+      "name": "pm-data",
+      "efsVolumeConfiguration": {
+        "fileSystemId": "fs-xxxxxxxx",
+        "transitEncryption": "ENABLED",
+        "rootDirectory": "/",
+        "authorizationConfig": {
+          "iam": "ENABLED"
+        }
+      }
+    }
+  ]
+}
