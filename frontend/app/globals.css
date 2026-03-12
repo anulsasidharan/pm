@@ -54,6 +54,30 @@ body {
   margin-bottom: 0.8rem;
 }
 
+.onboarding {
+  background: #fff9e9;
+  border: 1px solid #f3db9f;
+  border-left: 5px solid var(--accent-yellow);
+  border-radius: 8px;
+  padding: 0.75rem;
+  margin-bottom: 0.8rem;
+}
+
+.onboarding h2 {
+  margin: 0 0 0.35rem;
+  font-size: 1rem;
+}
+
+.onboarding button {
+  margin-top: 0.55rem;
+  border: 1px solid #e2c777;
+  border-radius: 6px;
+  background: #fff;
+  color: var(--dark-navy);
+  padding: 0.3rem 0.6rem;
+  cursor: pointer;
+}
+
 .primary {
   border: 1px solid var(--purple-secondary);
   border-radius: 6px;

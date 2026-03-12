@@ -35,7 +35,22 @@ type LoginPayload = {
 
 type RegisterPayload = {
   username: string;
+  email: string;
   password: string;
+};
+
+type PasswordResetRequestPayload = {
+  email: string;
+};
+
+type PasswordResetConfirmPayload = {
+  token: string;
+  new_password: string;
+};
+
+export type PasswordResetRequestResponse = {
+  status: string;
+  dev_reset_token?: string;
 };
 
 export class ApiError extends Error {
@@ -89,6 +104,22 @@ export async function login(payload: LoginPayload): Promise<void> {
 
 export async function register(payload: RegisterPayload): Promise<void> {
   await request<{ status: string }>("/api/auth/register", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function requestPasswordReset(
+  payload: PasswordResetRequestPayload
+): Promise<PasswordResetRequestResponse> {
+  return request<PasswordResetRequestResponse>("/api/auth/password-reset/request", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function confirmPasswordReset(payload: PasswordResetConfirmPayload): Promise<void> {
+  await request<{ status: string }>("/api/auth/password-reset/confirm", {
     method: "POST",
     body: JSON.stringify(payload)
   });

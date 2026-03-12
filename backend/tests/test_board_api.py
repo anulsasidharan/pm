@@ -38,55 +38,55 @@ def test_auth_login_and_logout_cookie_lifecycle() -> None:
         assert after_logout.status_code == 401
 
 
-    def test_register_creates_user_sets_cookie_and_allows_board_access() -> None:
-        with TestClient(app) as client:
-            register_response = client.post(
-                "/api/auth/register",
-                json={"username": "newuser", "password": "strongpass123"},
-            )
+def test_register_creates_user_sets_cookie_and_allows_board_access() -> None:
+    with TestClient(app) as client:
+        register_response = client.post(
+            "/api/auth/register",
+            json={"username": "newuser", "email": "newuser@example.com", "password": "strongpass123"},
+        )
 
-            assert register_response.status_code == 201
-            assert register_response.json() == {"status": "created"}
+        assert register_response.status_code == 201
+        assert register_response.json() == {"status": "created"}
 
-            board_response = client.get("/api/board")
-            assert board_response.status_code == 200
-
-
-    def test_register_rejects_duplicate_username() -> None:
-        with TestClient(app) as client:
-            first = client.post(
-                "/api/auth/register",
-                json={"username": "newuser", "password": "strongpass123"},
-            )
-            assert first.status_code == 201
-
-            second = client.post(
-                "/api/auth/register",
-                json={"username": "newuser", "password": "anotherstrongpass"},
-            )
-
-        assert second.status_code == 409
-        assert second.json()["detail"] == "Username already exists"
+        board_response = client.get("/api/board")
+        assert board_response.status_code == 200
 
 
-    def test_login_works_for_registered_user() -> None:
-        with TestClient(app) as client:
-            register_response = client.post(
-                "/api/auth/register",
-                json={"username": "newuser", "password": "strongpass123"},
-            )
-            assert register_response.status_code == 201
+def test_register_rejects_duplicate_username_or_email() -> None:
+    with TestClient(app) as client:
+        first = client.post(
+            "/api/auth/register",
+            json={"username": "newuser", "email": "newuser@example.com", "password": "strongpass123"},
+        )
+        assert first.status_code == 201
 
-            client.post("/api/auth/logout")
+        second = client.post(
+            "/api/auth/register",
+            json={"username": "newuser", "email": "newuser@example.com", "password": "anotherstrongpass"},
+        )
 
-            login_response = client.post(
-                "/api/auth/login",
-                json={"username": "newuser", "password": "strongpass123"},
-            )
-            assert login_response.status_code == 200
+    assert second.status_code == 409
+    assert second.json()["detail"] == "Username or email already exists"
 
-            board_response = client.get("/api/board")
-            assert board_response.status_code == 200
+
+def test_login_works_for_registered_user() -> None:
+    with TestClient(app) as client:
+        register_response = client.post(
+            "/api/auth/register",
+            json={"username": "newuser", "email": "newuser@example.com", "password": "strongpass123"},
+        )
+        assert register_response.status_code == 201
+
+        client.post("/api/auth/logout")
+
+        login_response = client.post(
+            "/api/auth/login",
+            json={"username": "newuser", "password": "strongpass123"},
+        )
+        assert login_response.status_code == 200
+
+        board_response = client.get("/api/board")
+        assert board_response.status_code == 200
 
 
 def test_get_board_requires_authentication() -> None:

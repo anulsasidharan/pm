@@ -1,6 +1,16 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 
-import { ApiError, fetchBoard, login, logout, register, saveBoard, sendAiChat } from "./api";
+import {
+  ApiError,
+  confirmPasswordReset,
+  fetchBoard,
+  login,
+  logout,
+  register,
+  requestPasswordReset,
+  saveBoard,
+  sendAiChat
+} from "./api";
 
 function jsonResponse(status: number, payload: unknown): Response {
   return new Response(JSON.stringify(payload), {
@@ -37,7 +47,7 @@ describe("api client", () => {
     const mockFetch = vi.mocked(fetch);
     mockFetch.mockResolvedValueOnce(jsonResponse(201, { status: "created" }));
 
-    await register({ username: "newuser", password: "strongpass123" });
+    await register({ username: "newuser", email: "newuser@example.com", password: "strongpass123" });
 
     expect(mockFetch).toHaveBeenCalledWith(
       "/api/auth/register",
@@ -45,6 +55,30 @@ describe("api client", () => {
         method: "POST",
         credentials: "include"
       })
+    );
+  });
+
+  it("sends password reset request and confirm calls", async () => {
+    const mockFetch = vi.mocked(fetch);
+    mockFetch
+      .mockResolvedValueOnce(jsonResponse(200, { status: "ok", dev_reset_token: "dev-token" }))
+      .mockResolvedValueOnce(jsonResponse(200, { status: "ok" }));
+
+    await expect(requestPasswordReset({ email: "newuser@example.com" })).resolves.toEqual({
+      status: "ok",
+      dev_reset_token: "dev-token"
+    });
+    await expect(confirmPasswordReset({ token: "dev-token", new_password: "newpass123" })).resolves.toBeUndefined();
+
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      1,
+      "/api/auth/password-reset/request",
+      expect.objectContaining({ method: "POST" })
+    );
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      2,
+      "/api/auth/password-reset/confirm",
+      expect.objectContaining({ method: "POST" })
     );
   });
 

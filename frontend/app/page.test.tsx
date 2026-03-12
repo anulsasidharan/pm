@@ -31,7 +31,10 @@ function jsonResponse(status: number, payload: unknown): Response {
 
 function createMockServer(): MockServer {
   let isLoggedIn = false;
-  const users = new Map<string, string>([["user", "password"]]);
+  const users = new Map<string, { password: string; email: string }>([
+    ["user", { password: "password", email: "user@example.com" }]
+  ]);
+  const resetTokens = new Map<string, string>();
   let failNextPut = false;
   let board: { columns: Column[] } = {
     columns: [
@@ -87,7 +90,8 @@ function createMockServer(): MockServer {
 
     if (url === "/api/auth/login" && method === "POST") {
       const payload = init?.body ? JSON.parse(String(init.body)) : {};
-      if (users.get(payload.username) === payload.password) {
+      const userRecord = users.get(payload.username);
+      if (userRecord && userRecord.password === payload.password) {
         isLoggedIn = true;
         return jsonResponse(200, { status: "ok" });
       }
@@ -97,13 +101,43 @@ function createMockServer(): MockServer {
 
     if (url === "/api/auth/register" && method === "POST") {
       const payload = init?.body ? JSON.parse(String(init.body)) : {};
-      if (users.has(payload.username)) {
+      const emailTaken = Array.from(users.values()).some((record) => record.email === payload.email);
+      if (users.has(payload.username) || emailTaken) {
         return jsonResponse(409, { detail: "Username already exists" });
       }
 
-      users.set(payload.username, payload.password);
+      users.set(payload.username, { password: payload.password, email: payload.email });
       isLoggedIn = true;
       return jsonResponse(201, { status: "created" });
+    }
+
+    if (url === "/api/auth/password-reset/request" && method === "POST") {
+      const payload = init?.body ? JSON.parse(String(init.body)) : {};
+      const matchedUser = Array.from(users.entries()).find(([, value]) => value.email === payload.email);
+      if (!matchedUser) {
+        return jsonResponse(200, { status: "ok" });
+      }
+
+      const token = `token-${matchedUser[0]}`;
+      resetTokens.set(token, matchedUser[0]);
+      return jsonResponse(200, { status: "ok", dev_reset_token: token });
+    }
+
+    if (url === "/api/auth/password-reset/confirm" && method === "POST") {
+      const payload = init?.body ? JSON.parse(String(init.body)) : {};
+      const username = resetTokens.get(payload.token);
+      if (!username) {
+        return jsonResponse(400, { detail: "Invalid or expired reset token" });
+      }
+
+      const current = users.get(username);
+      if (!current) {
+        return jsonResponse(400, { detail: "Invalid or expired reset token" });
+      }
+
+      users.set(username, { ...current, password: payload.new_password });
+      resetTokens.delete(payload.token);
+      return jsonResponse(200, { status: "ok" });
     }
 
     if (url === "/api/auth/logout" && method === "POST") {
@@ -224,11 +258,53 @@ describe("HomePage", () => {
 
     await screen.findByRole("heading", { level: 2, name: "Sign Up" });
     fireEvent.change(screen.getByLabelText("Username"), { target: { value: "newuser" } });
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "newuser@example.com" } });
     fireEvent.change(screen.getByLabelText("Password"), { target: { value: "strongpass123" } });
     fireEvent.click(screen.getByRole("button", { name: "Create Account" }));
 
     await screen.findByText("Signed in as newuser");
     expect(screen.getByText("To Do")).toBeInTheDocument();
+  });
+
+  it("shows onboarding for first-time board and allows dismiss", async () => {
+    server.seedBoard({
+      columns: [
+        { id: "todo", name: "To Do", cards: [] },
+        { id: "in-progress", name: "In Progress", cards: [] },
+        { id: "done", name: "Done", cards: [] }
+      ]
+    });
+
+    render(<HomePage />);
+    await loginAsDefaultUser();
+
+    await screen.findByRole("heading", { level: 2, name: "Welcome to your board" });
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("heading", { level: 2, name: "Welcome to your board" })).not.toBeInTheDocument();
+    });
+  });
+
+  it("handles password reset request and confirmation", async () => {
+    render(<HomePage />);
+
+    await screen.findByRole("heading", { level: 2, name: "Sign In" });
+    fireEvent.click(screen.getByRole("button", { name: "Forgot password?" }));
+
+    await screen.findByRole("heading", { level: 2, name: "Reset Password" });
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "user@example.com" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send Reset Email" }));
+
+    const notice = await screen.findByText(/Dev token:/);
+    const token = notice.textContent?.split("Dev token:")[1]?.trim() ?? "";
+    expect(token).toContain("token-user");
+
+    fireEvent.change(screen.getByLabelText("Reset Token"), { target: { value: token } });
+    fireEvent.change(screen.getByLabelText("New Password"), { target: { value: "newpass123" } });
+    fireEvent.click(screen.getByRole("button", { name: "Reset Password" }));
+
+    await screen.findByText("Password reset successful. You can now sign in.");
   });
 
   it("edits a card title and reload keeps latest persisted state", async () => {

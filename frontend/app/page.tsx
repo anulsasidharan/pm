@@ -4,12 +4,14 @@ import React, { useEffect, useRef, useState } from "react";
 
 import {
   ApiError,
+  confirmPasswordReset,
   type Card,
   type ChatMessage,
   type Column,
   fetchBoard,
   login,
   logout,
+  requestPasswordReset,
   register,
   saveBoard,
   sendAiChat
@@ -47,14 +49,18 @@ function normalizeColumns(columns: Column[]): Column[] {
 }
 
 export default function HomePage() {
-  const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
+  const [authMode, setAuthMode] = useState<"signin" | "signup" | "reset">("signin");
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
   const [isBoardLoading, setIsBoardLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [signedInUsername, setSignedInUsername] = useState("");
   const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [resetToken, setResetToken] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [authNotice, setAuthNotice] = useState("");
   const [authError, setAuthError] = useState("");
   const [boardError, setBoardError] = useState("");
   const [columns, setColumns] = useState<Column[]>(DEFAULT_COLUMNS);
@@ -66,6 +72,7 @@ export default function HomePage() {
   const [chatInput, setChatInput] = useState("");
   const [isChatLoading, setIsChatLoading] = useState(false);
   const [chatError, setChatError] = useState("");
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const pendingSaveCountRef = useRef(0);
   const saveQueueRef = useRef(Promise.resolve());
   const draggingCardIdRef = useRef<string | null>(null);
@@ -118,6 +125,22 @@ export default function HomePage() {
       isMounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!isAuthenticated || !signedInUsername) {
+      setShowOnboarding(false);
+      return;
+    }
+
+    if (!columns.every((column) => column.cards.length === 0)) {
+      setShowOnboarding(false);
+      return;
+    }
+
+    const key = `pm_onboarding_dismissed_${signedInUsername}`;
+    const dismissed = window.localStorage.getItem(key) === "1";
+    setShowOnboarding(!dismissed);
+  }, [isAuthenticated, signedInUsername, columns]);
 
   function findDraggingSource(cardId: string): { columnId: string; index: number } | null {
     for (const column of columns) {
@@ -374,6 +397,7 @@ export default function HomePage() {
   async function handleLogin(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setAuthError("");
+    setAuthNotice("");
 
     try {
       await login({ username, password });
@@ -393,10 +417,17 @@ export default function HomePage() {
   async function handleRegister(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setAuthError("");
+    setAuthNotice("");
 
     const trimmedUsername = username.trim();
+    const trimmedEmail = email.trim().toLowerCase();
     if (trimmedUsername.length < 3) {
       setAuthError("Username must be at least 3 characters.");
+      return;
+    }
+
+    if (!trimmedEmail || !trimmedEmail.includes("@")) {
+      setAuthError("Enter a valid email address.");
       return;
     }
 
@@ -406,18 +437,70 @@ export default function HomePage() {
     }
 
     try {
-      await register({ username: trimmedUsername, password });
+      await register({ username: trimmedUsername, email: trimmedEmail, password });
       setIsAuthenticated(true);
       setSignedInUsername(trimmedUsername);
       await loadBoardFromBackend();
     } catch (error) {
       if (error instanceof ApiError && error.status === 409) {
-        setAuthError("Username already exists.");
+        setAuthError("Username or email already exists.");
         return;
       }
 
       setAuthError("Unable to register right now.");
     }
+  }
+
+  async function handleRequestPasswordReset(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setAuthError("");
+    setAuthNotice("");
+
+    const trimmedEmail = email.trim().toLowerCase();
+    if (!trimmedEmail || !trimmedEmail.includes("@")) {
+      setAuthError("Enter a valid email address.");
+      return;
+    }
+
+    try {
+      const response = await requestPasswordReset({ email: trimmedEmail });
+      const devTokenMessage = response.dev_reset_token
+        ? ` Dev token: ${response.dev_reset_token}`
+        : "";
+      setAuthNotice(`If an account exists, a reset email has been sent.${devTokenMessage}`);
+    } catch {
+      setAuthError("Unable to request password reset right now.");
+    }
+  }
+
+  async function handleConfirmPasswordReset() {
+    setAuthError("");
+    setAuthNotice("");
+
+    if (newPassword.length < 8) {
+      setAuthError("New password must be at least 8 characters.");
+      return;
+    }
+
+    try {
+      await confirmPasswordReset({ token: resetToken.trim(), new_password: newPassword });
+      setAuthNotice("Password reset successful. You can now sign in.");
+      setAuthMode("signin");
+      setResetToken("");
+      setNewPassword("");
+    } catch (error) {
+      if (error instanceof ApiError) {
+        setAuthError(error.message);
+      } else {
+        setAuthError("Unable to reset password right now.");
+      }
+    }
+  }
+
+  function dismissOnboarding() {
+    const key = `pm_onboarding_dismissed_${signedInUsername}`;
+    window.localStorage.setItem(key, "1");
+    setShowOnboarding(false);
   }
 
   async function handleLogout() {
@@ -430,7 +513,11 @@ export default function HomePage() {
     setIsAuthenticated(false);
     setSignedInUsername("");
     setUsername("");
+    setEmail("");
     setPassword("");
+    setResetToken("");
+    setNewPassword("");
+    setAuthNotice("");
     setAuthError("");
     setBoardError("");
     setDraggingCardId(null);
@@ -462,6 +549,16 @@ export default function HomePage() {
               Sign Out
             </button>
           </div>
+          {showOnboarding ? (
+            <section className="onboarding" aria-label="Getting started">
+              <h2>Welcome to your board</h2>
+              <p className="sub">Start by adding a column, then create or move cards with AI or drag and drop.</p>
+              <button type="button" onClick={dismissOnboarding}>
+                Dismiss
+              </button>
+            </section>
+          ) : null}
+
           <div className="status-row" aria-live="polite">
             {isBoardLoading ? <p className="sub">Loading board...</p> : null}
             {isSaving ? <p className="sub">Saving changes...</p> : null}
@@ -609,35 +706,97 @@ export default function HomePage() {
         </>
       ) : (
         <section className="login" aria-label="Sign in form">
-          <h2>{authMode === "signin" ? "Sign In" : "Sign Up"}</h2>
-          <form onSubmit={(event) => void (authMode === "signin" ? handleLogin(event) : handleRegister(event))}>
-            <label htmlFor="username">Username</label>
-            <input
-              id="username"
-              value={username}
-              onChange={(event) => setUsername(event.target.value)}
-              autoComplete="username"
-            />
-            <label htmlFor="password">Password</label>
-            <input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              autoComplete={authMode === "signin" ? "current-password" : "new-password"}
-            />
+          <h2>{authMode === "signin" ? "Sign In" : authMode === "signup" ? "Sign Up" : "Reset Password"}</h2>
+          <form
+            onSubmit={(event) =>
+              void (authMode === "signin"
+                ? handleLogin(event)
+                : authMode === "signup"
+                  ? handleRegister(event)
+                  : handleRequestPasswordReset(event))
+            }
+          >
+            {authMode !== "reset" ? (
+              <>
+                <label htmlFor="username">Username</label>
+                <input
+                  id="username"
+                  value={username}
+                  onChange={(event) => setUsername(event.target.value)}
+                  autoComplete="username"
+                />
+              </>
+            ) : null}
+            {authMode !== "signin" ? (
+              <>
+                <label htmlFor="email">Email</label>
+                <input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  autoComplete="email"
+                />
+              </>
+            ) : null}
+            {authMode !== "reset" ? (
+              <>
+                <label htmlFor="password">Password</label>
+                <input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  autoComplete={authMode === "signin" ? "current-password" : "new-password"}
+                />
+              </>
+            ) : null}
             {authError ? <p className="error">{authError}</p> : null}
+            {authNotice ? <p className="sub">{authNotice}</p> : null}
             <button type="submit" className="primary">
-              {authMode === "signin" ? "Sign In" : "Create Account"}
+              {authMode === "signin" ? "Sign In" : authMode === "signup" ? "Create Account" : "Send Reset Email"}
+            </button>
+            {authMode === "reset" ? (
+              <>
+                <label htmlFor="reset-token">Reset Token</label>
+                <input
+                  id="reset-token"
+                  value={resetToken}
+                  onChange={(event) => setResetToken(event.target.value)}
+                  placeholder="Paste token from email"
+                />
+                <label htmlFor="new-password">New Password</label>
+                <input
+                  id="new-password"
+                  type="password"
+                  value={newPassword}
+                  onChange={(event) => setNewPassword(event.target.value)}
+                  autoComplete="new-password"
+                />
+                <button type="button" onClick={() => void handleConfirmPasswordReset()}>
+                  Reset Password
+                </button>
+              </>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => {
+                setAuthMode((prev) => (prev === "signup" ? "signin" : "signup"));
+                setAuthError("");
+                setAuthNotice("");
+              }}
+            >
+              {authMode === "signup" ? "Already have an account? Sign in" : "New here? Create an account"}
             </button>
             <button
               type="button"
               onClick={() => {
-                setAuthMode((prev) => (prev === "signin" ? "signup" : "signin"));
+                setAuthMode((prev) => (prev === "reset" ? "signin" : "reset"));
                 setAuthError("");
+                setAuthNotice("");
               }}
             >
-              {authMode === "signin" ? "New here? Create an account" : "Already have an account? Sign in"}
+              {authMode === "reset" ? "Back to sign in" : "Forgot password?"}
             </button>
           </form>
         </section>

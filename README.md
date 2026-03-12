@@ -228,4 +228,59 @@ This modular structure allows the system to scale easily while keeping component
 
 💻 Built with **AI-assisted development using GitHub Copilot**
 
+---
+
+## Environment Configuration (Auth + Mail)
+
+Add these values to your environment configuration:
+
+```env
+# Existing AI config
+OPENROUTER_API_KEY=your_openrouter_api_key
+
+# Session/auth security
+PM_SESSION_SECRET=replace_with_long_random_secret
+PM_COOKIE_SECURE=false
+PM_ENV=development
+
+# Auth hardening controls
+PM_AUTH_WINDOW_SECONDS=300
+PM_AUTH_MAX_ATTEMPTS_PER_IP=30
+PM_AUTH_LOCKOUT_THRESHOLD=5
+PM_AUTH_LOCKOUT_SECONDS=900
+
+# Password reset / Resend
+RESEND_API_KEY=re_xxxxxxxxxxxxxxxxx
+PM_MAIL_FROM=onboarding@resend.dev
+PM_APP_BASE_URL=http://localhost:8000
+PM_DEV_EXPOSE_RESET_TOKEN=true
+```
+
+Production recommendations:
+
+1. Set `PM_ENV=production`
+2. Set `PM_COOKIE_SECURE=true`
+3. Set `PM_DEV_EXPOSE_RESET_TOKEN=false`
+4. Use a verified sender/domain for `PM_MAIL_FROM`
+5. Set `PM_APP_BASE_URL` to your public HTTPS URL
+
+## Password Reset with Resend
+
+The app now supports password reset request/confirm endpoints.
+
+1. User requests reset from the login screen.
+2. Backend generates a one-time token and stores only a hash in SQLite.
+3. Backend sends reset email using Resend.
+4. User submits token + new password to confirm reset.
+
+Endpoints:
+
+1. `POST /api/auth/password-reset/request`
+2. `POST /api/auth/password-reset/confirm`
+
+Notes:
+
+1. In development mode, API may include `dev_reset_token` in the response to simplify local testing.
+2. In production, disable token exposure with `PM_DEV_EXPOSE_RESET_TOKEN=false`.
+
 

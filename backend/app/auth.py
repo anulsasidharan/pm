@@ -16,6 +16,11 @@ PASSWORD_ITERATIONS = 210_000
 PASSWORD_ALGORITHM = "sha256"
 
 
+def _cookie_secure_enabled() -> bool:
+    value = os.getenv("PM_COOKIE_SECURE", "false").strip().lower()
+    return value in {"1", "true", "yes", "on"}
+
+
 def _serializer() -> URLSafeTimedSerializer:
     secret = os.getenv("PM_SESSION_SECRET", "dev-only-session-secret")
     return URLSafeTimedSerializer(secret_key=secret, salt="pm-auth")
@@ -46,7 +51,7 @@ def set_session_cookie(response: Response, username: str) -> None:
         max_age=SESSION_MAX_AGE_SECONDS,
         httponly=True,
         samesite="lax",
-        secure=False,
+        secure=_cookie_secure_enabled(),
         path="/",
     )
 
