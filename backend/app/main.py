@@ -14,7 +14,7 @@ from app.ai import (
     run_structured_board_chat,
 )
 from app.auth import clear_session_cookie, require_authenticated_username, set_session_cookie
-from app.db import get_board_json, initialize_database, save_board_json
+from app.db import create_user, get_board_json, initialize_database, save_board_json, verify_user_credentials
 from app.schemas import (
     AiConnectivityRequest,
     AiConnectivityResponse,
@@ -24,6 +24,7 @@ from app.schemas import (
     BoardResponse,
     BoardUpdateRequest,
     LoginRequest,
+    RegisterRequest,
 )
 
 HARDCODED_USER = "user"
@@ -33,6 +34,7 @@ DEFAULT_BOARD = Board(columns=[])
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     initialize_database()
+    create_user(HARDCODED_USER, HARDCODED_PASSWORD)
     yield
 
 
@@ -46,7 +48,7 @@ def health() -> dict[str, str]:
 
 @app.post("/api/auth/login")
 def login(payload: LoginRequest, response: Response) -> dict[str, str]:
-    if payload.username != HARDCODED_USER or payload.password != HARDCODED_PASSWORD:
+    if not verify_user_credentials(payload.username, payload.password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid username or password",
@@ -54,6 +56,19 @@ def login(payload: LoginRequest, response: Response) -> dict[str, str]:
 
     set_session_cookie(response, payload.username)
     return {"status": "ok"}
+
+
+@app.post("/api/auth/register", status_code=status.HTTP_201_CREATED)
+def register(payload: RegisterRequest, response: Response) -> dict[str, str]:
+    created = create_user(payload.username, payload.password)
+    if not created:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Username already exists",
+        )
+
+    set_session_cookie(response, payload.username)
+    return {"status": "created"}
 
 
 @app.post("/api/auth/logout")

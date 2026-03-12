@@ -1,12 +1,19 @@
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
 import os
+import secrets
 
 from fastapi import HTTPException, Request, Response, status
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 SESSION_COOKIE_NAME = "pm_session"
 SESSION_MAX_AGE_SECONDS = 60 * 60 * 24
+PASSWORD_SALT_BYTES = 16
+PASSWORD_ITERATIONS = 210_000
+PASSWORD_ALGORITHM = "sha256"
 
 
 def _serializer() -> URLSafeTimedSerializer:
@@ -64,3 +71,41 @@ def require_authenticated_username(request: Request) -> str:
         )
 
     return username
+
+
+def hash_password(password: str) -> str:
+    salt = secrets.token_bytes(PASSWORD_SALT_BYTES)
+    digest = hashlib.pbkdf2_hmac(
+        PASSWORD_ALGORITHM,
+        password.encode("utf-8"),
+        salt,
+        PASSWORD_ITERATIONS,
+    )
+    salt_b64 = base64.b64encode(salt).decode("ascii")
+    digest_b64 = base64.b64encode(digest).decode("ascii")
+    return f"pbkdf2_{PASSWORD_ALGORITHM}${PASSWORD_ITERATIONS}${salt_b64}${digest_b64}"
+
+
+def verify_password(password: str, encoded_hash: str) -> bool:
+    try:
+        scheme, iterations_str, salt_b64, digest_b64 = encoded_hash.split("$", 3)
+    except ValueError:
+        return False
+
+    if scheme != f"pbkdf2_{PASSWORD_ALGORITHM}":
+        return False
+
+    try:
+        iterations = int(iterations_str)
+        salt = base64.b64decode(salt_b64)
+        expected_digest = base64.b64decode(digest_b64)
+    except Exception:
+        return False
+
+    candidate_digest = hashlib.pbkdf2_hmac(
+        PASSWORD_ALGORITHM,
+        password.encode("utf-8"),
+        salt,
+        iterations,
+    )
+    return hmac.compare_digest(candidate_digest, expected_digest)

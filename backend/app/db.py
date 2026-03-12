@@ -5,6 +5,8 @@ import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
 
+from app.auth import hash_password, verify_password
+
 
 def get_default_db_path() -> Path:
     # Works locally (repo-root/data) and in Docker (/app/data).
@@ -53,14 +55,46 @@ def initialize_database(db_path: Path | None = None) -> Path:
 
 
 def _ensure_user(conn: sqlite3.Connection, username: str) -> int:
-    conn.execute(
-        "INSERT OR IGNORE INTO users(username, password_hash) VALUES(?, '')",
-        (username,),
-    )
     row = conn.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()
     if row is None:
-        raise RuntimeError("Failed to ensure user row")
+        raise RuntimeError("User does not exist")
     return int(row[0])
+
+
+def create_user(username: str, password: str, db_path: Path | None = None) -> bool:
+    resolved_path = initialize_database(db_path)
+    password_hash = hash_password(password)
+
+    with _connect(resolved_path) as conn:
+        cursor = conn.execute(
+            "INSERT OR IGNORE INTO users(username, password_hash) VALUES(?, ?)",
+            (username, password_hash),
+        )
+        conn.commit()
+        return cursor.rowcount == 1
+
+
+def verify_user_credentials(
+    username: str,
+    password: str,
+    db_path: Path | None = None,
+) -> bool:
+    resolved_path = initialize_database(db_path)
+
+    with _connect(resolved_path) as conn:
+        row = conn.execute(
+            "SELECT password_hash FROM users WHERE username = ?",
+            (username,),
+        ).fetchone()
+
+    if row is None:
+        return False
+
+    password_hash = str(row[0])
+    if not password_hash:
+        return False
+
+    return verify_password(password, password_hash)
 
 
 def save_board_json(username: str, board_json: str, db_path: Path | None = None) -> None:

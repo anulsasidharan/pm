@@ -33,6 +33,11 @@ type LoginPayload = {
   password: string;
 };
 
+type RegisterPayload = {
+  username: string;
+  password: string;
+};
+
 export class ApiError extends Error {
   status: number;
 
@@ -77,6 +82,13 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 
 export async function login(payload: LoginPayload): Promise<void> {
   await request<{ status: string }>("/api/auth/login", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function register(payload: RegisterPayload): Promise<void> {
+  await request<{ status: string }>("/api/auth/register", {
     method: "POST",
     body: JSON.stringify(payload)
   });

@@ -10,6 +10,7 @@ import {
   fetchBoard,
   login,
   logout,
+  register,
   saveBoard,
   sendAiChat
 } from "./api";
@@ -22,8 +23,7 @@ const DEFAULT_COLUMNS: Column[] = [
 
 function normalizeColumns(columns: Column[]): Column[] {
   const byId = new Map(columns.map((column) => [column.id, column]));
-
-  return DEFAULT_COLUMNS.map((fallback) => {
+  const normalizedDefaults = DEFAULT_COLUMNS.map((fallback) => {
     const existing = byId.get(fallback.id);
     return existing
       ? {
@@ -35,13 +35,24 @@ function normalizeColumns(columns: Column[]): Column[] {
           cards: []
         };
   });
+
+  const extraColumns = columns
+    .filter((column) => !DEFAULT_COLUMNS.some((fallback) => fallback.id === column.id))
+    .map((column) => ({
+      ...column,
+      cards: Array.isArray(column.cards) ? column.cards : []
+    }));
+
+  return [...normalizedDefaults, ...extraColumns];
 }
 
 export default function HomePage() {
+  const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
   const [isBoardLoading, setIsBoardLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [signedInUsername, setSignedInUsername] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [authError, setAuthError] = useState("");
@@ -50,6 +61,7 @@ export default function HomePage() {
   const [draggingCardId, setDraggingCardId] = useState<string | null>(null);
   const [editingCardId, setEditingCardId] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState("");
+  const [newColumnName, setNewColumnName] = useState("");
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [isChatLoading, setIsChatLoading] = useState(false);
@@ -72,6 +84,9 @@ export default function HomePage() {
 
         const normalizedColumns = normalizeColumns(board.columns);
         setIsAuthenticated(true);
+        if (username.trim()) {
+          setSignedInUsername(username.trim());
+        }
         setColumns(normalizedColumns);
 
         // Auto-heal persisted board shape when fixed columns are missing.
@@ -169,6 +184,45 @@ export default function HomePage() {
       }))
     );
     cancelEdit();
+  }
+
+  function deleteCard(cardId: string) {
+    applyColumnsUpdate((prev) =>
+      prev.map((column) => ({
+        ...column,
+        cards: column.cards.filter((card) => card.id !== cardId)
+      }))
+    );
+  }
+
+  function createColumnId(name: string, existingIds: Set<string>): string {
+    const base = name
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "column";
+
+    let candidate = base;
+    let suffix = 2;
+    while (existingIds.has(candidate)) {
+      candidate = `${base}-${suffix}`;
+      suffix += 1;
+    }
+
+    return candidate;
+  }
+
+  function addColumn() {
+    const trimmed = newColumnName.trim();
+    if (!trimmed) {
+      return;
+    }
+
+    applyColumnsUpdate((prev) => {
+      const id = createColumnId(trimmed, new Set(prev.map((column) => column.id)));
+      return [...prev, { id, name: trimmed, cards: [] }];
+    });
+    setNewColumnName("");
   }
 
   function moveCard(cardId: string, targetColumnId: string, targetIndex: number) {
@@ -324,6 +378,7 @@ export default function HomePage() {
     try {
       await login({ username, password });
       setIsAuthenticated(true);
+      setSignedInUsername(username.trim());
       await loadBoardFromBackend();
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
@@ -335,6 +390,36 @@ export default function HomePage() {
     }
   }
 
+  async function handleRegister(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setAuthError("");
+
+    const trimmedUsername = username.trim();
+    if (trimmedUsername.length < 3) {
+      setAuthError("Username must be at least 3 characters.");
+      return;
+    }
+
+    if (password.length < 8) {
+      setAuthError("Password must be at least 8 characters.");
+      return;
+    }
+
+    try {
+      await register({ username: trimmedUsername, password });
+      setIsAuthenticated(true);
+      setSignedInUsername(trimmedUsername);
+      await loadBoardFromBackend();
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 409) {
+        setAuthError("Username already exists.");
+        return;
+      }
+
+      setAuthError("Unable to register right now.");
+    }
+  }
+
   async function handleLogout() {
     try {
       await logout();
@@ -343,6 +428,7 @@ export default function HomePage() {
     }
 
     setIsAuthenticated(false);
+    setSignedInUsername("");
     setUsername("");
     setPassword("");
     setAuthError("");
@@ -376,7 +462,7 @@ export default function HomePage() {
       ) : isAuthenticated ? (
         <>
           <div className="session-row">
-            <p className="sub">Signed in as user</p>
+            <p className="sub">Signed in as {signedInUsername || "user"}</p>
             <button type="button" className="primary" onClick={() => void handleLogout()}>
               Sign Out
             </button>
@@ -386,6 +472,26 @@ export default function HomePage() {
             {isSaving ? <p className="sub">Saving changes...</p> : null}
             {boardError ? <p className="error">{boardError}</p> : null}
           </div>
+          <form
+            className="column-add"
+            onSubmit={(event) => {
+              event.preventDefault();
+              addColumn();
+            }}
+          >
+            <label htmlFor="new-column" className="sub">
+              Add Column
+            </label>
+            <input
+              id="new-column"
+              value={newColumnName}
+              onChange={(event) => setNewColumnName(event.target.value)}
+              placeholder="e.g. Blocked"
+            />
+            <button type="submit" className="primary">
+              Add Column
+            </button>
+          </form>
           <div className="workspace" aria-label="Kanban and AI workspace">
             <section className="board" aria-label="Kanban board">
               {columns.map((column) => (
@@ -463,9 +569,14 @@ export default function HomePage() {
                         ) : (
                           <>
                             <p>{card.title}</p>
-                            <button type="button" onClick={() => startEdit(card)}>
-                              Edit
-                            </button>
+                            <div className="card-actions">
+                              <button type="button" onClick={() => startEdit(card)}>
+                                Edit
+                              </button>
+                              <button type="button" onClick={() => deleteCard(card.id)} aria-label={`Delete ${card.title}`}>
+                                Delete
+                              </button>
+                            </div>
                           </>
                         )}
                       </li>
@@ -503,8 +614,8 @@ export default function HomePage() {
         </>
       ) : (
         <section className="login" aria-label="Sign in form">
-          <h2>Sign In</h2>
-          <form onSubmit={(event) => void handleLogin(event)}>
+          <h2>{authMode === "signin" ? "Sign In" : "Sign Up"}</h2>
+          <form onSubmit={(event) => void (authMode === "signin" ? handleLogin(event) : handleRegister(event))}>
             <label htmlFor="username">Username</label>
             <input
               id="username"
@@ -518,11 +629,20 @@ export default function HomePage() {
               type="password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              autoComplete="current-password"
+              autoComplete={authMode === "signin" ? "current-password" : "new-password"}
             />
             {authError ? <p className="error">{authError}</p> : null}
             <button type="submit" className="primary">
-              Sign In
+              {authMode === "signin" ? "Sign In" : "Create Account"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setAuthMode((prev) => (prev === "signin" ? "signup" : "signin"));
+                setAuthError("");
+              }}
+            >
+              {authMode === "signin" ? "New here? Create an account" : "Already have an account? Sign in"}
             </button>
           </form>
         </section>

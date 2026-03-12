@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 
-import { ApiError, fetchBoard, login, logout, saveBoard, sendAiChat } from "./api";
+import { ApiError, fetchBoard, login, logout, register, saveBoard, sendAiChat } from "./api";
 
 function jsonResponse(status: number, payload: unknown): Response {
   return new Response(JSON.stringify(payload), {
@@ -26,6 +26,21 @@ describe("api client", () => {
 
     expect(mockFetch).toHaveBeenCalledWith(
       "/api/auth/login",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include"
+      })
+    );
+  });
+
+  it("sends register request with credentials", async () => {
+    const mockFetch = vi.mocked(fetch);
+    mockFetch.mockResolvedValueOnce(jsonResponse(201, { status: "created" }));
+
+    await register({ username: "newuser", password: "strongpass123" });
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      "/api/auth/register",
       expect.objectContaining({
         method: "POST",
         credentials: "include"

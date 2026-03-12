@@ -95,7 +95,20 @@ body {
 .board {
   display: grid;
   gap: 1rem;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.column-add {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  margin-bottom: 0.8rem;
+}
+
+.column-add input {
+  border: 1px solid #bed8ef;
+  border-radius: 6px;
+  padding: 0.4rem 0.55rem;
 }
 
 .workspace {

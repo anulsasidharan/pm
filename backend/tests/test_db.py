@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from app.db import get_board_json, initialize_database, save_board_json
+from app.db import create_user, get_board_json, initialize_database, save_board_json, verify_user_credentials
 
 
 def test_initialize_database_creates_file_and_tables(tmp_path: Path) -> None:
@@ -32,6 +32,7 @@ def test_initialize_database_creates_file_and_tables(tmp_path: Path) -> None:
 def test_save_and_get_board_json_round_trip(tmp_path: Path) -> None:
     db_path = tmp_path / "test.db"
     payload = '{"columns":[{"id":"todo","cards":[]}]}'
+    assert create_user("user", "password123", db_path) is True
 
     save_board_json("user", payload, db_path)
 
@@ -50,3 +51,20 @@ def test_save_board_json_rejects_invalid_json(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError):
         save_board_json("user", "not-json", db_path)
+
+
+def test_create_user_and_verify_credentials(tmp_path: Path) -> None:
+    db_path = tmp_path / "test.db"
+
+    created = create_user("alice", "strong-password", db_path)
+
+    assert created is True
+    assert verify_user_credentials("alice", "strong-password", db_path) is True
+    assert verify_user_credentials("alice", "wrong-password", db_path) is False
+
+
+def test_create_user_returns_false_for_duplicate_username(tmp_path: Path) -> None:
+    db_path = tmp_path / "test.db"
+
+    assert create_user("alice", "strong-password", db_path) is True
+    assert create_user("alice", "strong-password", db_path) is False

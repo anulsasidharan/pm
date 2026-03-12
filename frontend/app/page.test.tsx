@@ -31,6 +31,7 @@ function jsonResponse(status: number, payload: unknown): Response {
 
 function createMockServer(): MockServer {
   let isLoggedIn = false;
+  const users = new Map<string, string>([["user", "password"]]);
   let failNextPut = false;
   let board: { columns: Column[] } = {
     columns: [
@@ -86,12 +87,23 @@ function createMockServer(): MockServer {
 
     if (url === "/api/auth/login" && method === "POST") {
       const payload = init?.body ? JSON.parse(String(init.body)) : {};
-      if (payload.username === "user" && payload.password === "password") {
+      if (users.get(payload.username) === payload.password) {
         isLoggedIn = true;
         return jsonResponse(200, { status: "ok" });
       }
 
       return jsonResponse(401, { detail: "Invalid username or password" });
+    }
+
+    if (url === "/api/auth/register" && method === "POST") {
+      const payload = init?.body ? JSON.parse(String(init.body)) : {};
+      if (users.has(payload.username)) {
+        return jsonResponse(409, { detail: "Username already exists" });
+      }
+
+      users.set(payload.username, payload.password);
+      isLoggedIn = true;
+      return jsonResponse(201, { status: "created" });
     }
 
     if (url === "/api/auth/logout" && method === "POST") {
@@ -204,6 +216,21 @@ describe("HomePage", () => {
     expect(screen.queryByText("Signed in as user")).not.toBeInTheDocument();
   });
 
+  it("allows new user registration", async () => {
+    render(<HomePage />);
+
+    await screen.findByRole("heading", { level: 2, name: "Sign In" });
+    fireEvent.click(screen.getByRole("button", { name: "New here? Create an account" }));
+
+    await screen.findByRole("heading", { level: 2, name: "Sign Up" });
+    fireEvent.change(screen.getByLabelText("Username"), { target: { value: "newuser" } });
+    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "strongpass123" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create Account" }));
+
+    await screen.findByText("Signed in as newuser");
+    expect(screen.getByText("To Do")).toBeInTheDocument();
+  });
+
   it("edits a card title and reload keeps latest persisted state", async () => {
     const { unmount } = render(<HomePage />);
 
@@ -222,6 +249,31 @@ describe("HomePage", () => {
 
     await screen.findByText("Signed in as user");
     expect(screen.getByText("Updated milestone plan")).toBeInTheDocument();
+  });
+
+  it("adds a new column and persists it", async () => {
+    render(<HomePage />);
+
+    await loginAsDefaultUser();
+
+    fireEvent.change(screen.getByPlaceholderText("e.g. Blocked"), { target: { value: "Blocked" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add Column" }));
+
+    await screen.findByRole("heading", { level: 2, name: "Blocked" });
+    expect(server.getBoard().columns.some((column) => column.name === "Blocked")).toBe(true);
+  });
+
+  it("deletes a card from a column and persists update", async () => {
+    render(<HomePage />);
+
+    await loginAsDefaultUser();
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete Review API contract" }));
+
+    await waitFor(() => {
+      expect(screen.queryByText("Review API contract")).not.toBeInTheDocument();
+    });
+    expect(server.getBoard().columns.find((column) => column.id === "todo")?.cards).toHaveLength(1);
   });
 
   it("moves a card from To Do to Done and persists update", async () => {
