@@ -450,11 +450,6 @@ export default function HomePage() {
     <main className="page">
       <header className="header">
         <h1>Project Management MVP</h1>
-        <p className="sub">Kanban board preview</p>
-        <p className="sub">Hello world from FastAPI inside Docker.</p>
-        <p className="sub">
-          Example check call: <code>fetch('/api/health')</code>
-        </p>
       </header>
 
       {isInitializing ? (
