@@ -39,6 +39,51 @@ body {
   color: var(--gray-text);
 }
 
+.session-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.8rem;
+}
+
+.primary {
+  border: 1px solid var(--purple-secondary);
+  border-radius: 6px;
+  background: var(--purple-secondary);
+  color: #fff;
+  padding: 0.4rem 0.7rem;
+  cursor: pointer;
+}
+
+.login {
+  max-width: 420px;
+  background: #fff;
+  border: 1px solid #d6e9f8;
+  border-top: 5px solid var(--blue-primary);
+  border-radius: 10px;
+  padding: 0.9rem;
+}
+
+.login h2 {
+  margin: 0 0 0.7rem;
+}
+
+.login form {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.login input {
+  border: 1px solid #bed8ef;
+  border-radius: 6px;
+  padding: 0.45rem 0.55rem;
+}
+
+.error {
+  color: #b42318;
+  margin: 0;
+}
+
 .board {
   display: grid;
   gap: 1rem;

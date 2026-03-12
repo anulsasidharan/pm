@@ -14,6 +14,8 @@
 
 Current status: Complete (approved on 2026-03-09)
 
+Progress update: Parts 1-5 complete (Part 5 approved on 2026-03-11)
+
 Approved decisions:
 
 - App port in Docker/local runtime: `8000`
@@ -102,42 +104,42 @@ Approved decisions:
 
 ### Checklist
 
-- [ ] Add login page/view gate before Kanban access
-- [ ] Validate hardcoded credentials (`user` / `password`)
-- [ ] Add sign-out control that clears authenticated session
-- [ ] Ensure unauthenticated access to `/` redirects or shows login view
+- [x] Add login page/view gate before Kanban access
+- [x] Validate hardcoded credentials (`user` / `password`)
+- [x] Add sign-out control that clears authenticated session
+- [x] Ensure unauthenticated access to `/` redirects or shows login view
 
 ### Tests
 
-- [ ] Frontend unit tests for login form validation and state transitions
-- [ ] Backend/session unit tests for auth guard behavior (if server session used)
-- [ ] Integration tests: login success, login failure, logout, blocked unauthenticated access
+- [x] Frontend unit tests for login form validation and state transitions
+- [x] Backend/session unit tests for auth guard behavior (if server session used)
+- [x] Integration tests: login success, login failure, logout, blocked unauthenticated access
 
 ### Success Criteria
 
-- [ ] Only authenticated users can view Kanban board
-- [ ] Logout returns user to login experience
-- [ ] Unit coverage remains >= 80%
+- [x] Only authenticated users can view Kanban board
+- [x] Logout returns user to login experience
+- [x] Unit coverage remains >= 80%
 
 ## Part 5: Database Modeling and Sign-Off
 
 ### Checklist
 
-- [ ] Define SQLite schema for users and board state storage
-- [ ] Store board as JSON payload per user (MVP requirement)
-- [ ] Define migration/init strategy for auto-create when DB missing
-- [ ] Document schema and rationale in `docs/`
-- [ ] Request and capture user sign-off before API persistence work
+- [x] Define SQLite schema for users and board state storage
+- [x] Store board as JSON payload per user (MVP requirement)
+- [x] Define migration/init strategy for auto-create when DB missing
+- [x] Document schema and rationale in `docs/`
+- [x] Request and capture user sign-off before API persistence work
 
 ### Tests
 
-- [ ] Unit tests for DB initialization and schema creation
-- [ ] Unit tests for basic read/write board JSON operations
+- [x] Unit tests for DB initialization and schema creation
+- [x] Unit tests for basic read/write board JSON operations
 
 ### Success Criteria
 
-- [ ] Schema document approved by user
-- [ ] DB can initialize from empty state automatically
+- [x] Schema document approved by user
+- [x] DB can initialize from empty state automatically
 
 ## Part 6: Backend API for Kanban Persistence
 

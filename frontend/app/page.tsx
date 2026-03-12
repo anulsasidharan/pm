@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 
 type Card = {
   id: string;
@@ -34,11 +34,25 @@ const initialColumns: Column[] = [
   }
 ];
 
+const AUTH_STORAGE_KEY = "pm-authenticated";
+const HARDCODED_USER = "user";
+const HARDCODED_PASSWORD = "password";
+
 export default function HomePage() {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [authError, setAuthError] = useState("");
   const [columns, setColumns] = useState<Column[]>(initialColumns);
   const [draggingCardId, setDraggingCardId] = useState<string | null>(null);
   const [editingCardId, setEditingCardId] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState("");
+
+  useEffect(() => {
+    if (window.localStorage.getItem(AUTH_STORAGE_KEY) === "1") {
+      setIsAuthenticated(true);
+    }
+  }, []);
 
   const draggingSource = useMemo(() => {
     if (!draggingCardId) {
@@ -130,18 +144,37 @@ export default function HomePage() {
     setDraggingCardId(null);
   }
 
-  function handleColumnDrop(targetColumnId: string) {
+  function handleColumnDrop(targetColumnId: string, targetLength: number) {
     if (!draggingCardId) {
       return;
     }
 
-    const targetColumn = columns.find((column) => column.id === targetColumnId);
-    if (!targetColumn) {
+    moveCard(draggingCardId, targetColumnId, targetLength);
+    setDraggingCardId(null);
+  }
+
+  function handleLogin(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (username === HARDCODED_USER && password === HARDCODED_PASSWORD) {
+      setIsAuthenticated(true);
+      setAuthError("");
+      window.localStorage.setItem(AUTH_STORAGE_KEY, "1");
       return;
     }
 
-    moveCard(draggingCardId, targetColumnId, targetColumn.cards.length);
+    setAuthError("Invalid username or password.");
+  }
+
+  function handleLogout() {
+    setIsAuthenticated(false);
+    setUsername("");
+    setPassword("");
+    setAuthError("");
     setDraggingCardId(null);
+    setEditingCardId(null);
+    setEditingValue("");
+    window.localStorage.removeItem(AUTH_STORAGE_KEY);
   }
 
   return (
@@ -155,62 +188,97 @@ export default function HomePage() {
         </p>
       </header>
 
-      <section className="board" aria-label="Kanban board">
-        {columns.map((column) => (
-          <article key={column.id} className="column">
-            <h2>{column.name}</h2>
-            <ul
-              onDragOver={(event) => event.preventDefault()}
-              onDrop={() => handleColumnDrop(column.id)}
-              aria-label={`${column.name} cards`}
-            >
-              {column.cards.map((card, index) => (
-                <li
-                  key={card.id}
-                  className="card"
-                  draggable
-                  onDragStart={() => setDraggingCardId(card.id)}
-                  onDragEnd={() => setDraggingCardId(null)}
+      {isAuthenticated ? (
+        <>
+          <div className="session-row">
+            <p className="sub">Signed in as user</p>
+            <button type="button" className="primary" onClick={handleLogout}>
+              Sign Out
+            </button>
+          </div>
+          <section className="board" aria-label="Kanban board">
+            {columns.map((column) => (
+              <article key={column.id} className="column">
+                <h2>{column.name}</h2>
+                <ul
                   onDragOver={(event) => event.preventDefault()}
-                  onDrop={(event) => {
-                    event.stopPropagation();
-                    handleCardDrop(column.id, index);
-                  }}
+                  onDrop={() => handleColumnDrop(column.id, column.cards.length)}
+                  aria-label={`${column.name} cards`}
                 >
-                  {editingCardId === card.id ? (
-                    <form
-                      className="card-edit"
-                      onSubmit={(event) => {
-                        event.preventDefault();
-                        saveEdit(card.id);
+                  {column.cards.map((card, index) => (
+                    <li
+                      key={card.id}
+                      className="card"
+                      draggable
+                      onDragStart={() => setDraggingCardId(card.id)}
+                      onDragEnd={() => setDraggingCardId(null)}
+                      onDragOver={(event) => event.preventDefault()}
+                      onDrop={(event) => {
+                        event.stopPropagation();
+                        handleCardDrop(column.id, index);
                       }}
                     >
-                      <input
-                        aria-label={`Edit ${card.title}`}
-                        value={editingValue}
-                        onChange={(event) => setEditingValue(event.target.value)}
-                      />
-                      <div className="card-actions">
-                        <button type="submit">Save</button>
-                        <button type="button" onClick={cancelEdit}>
-                          Cancel
-                        </button>
-                      </div>
-                    </form>
-                  ) : (
-                    <>
-                      <p>{card.title}</p>
-                      <button type="button" onClick={() => startEdit(card)}>
-                        Edit
-                      </button>
-                    </>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </article>
-        ))}
-      </section>
+                      {editingCardId === card.id ? (
+                        <form
+                          className="card-edit"
+                          onSubmit={(event) => {
+                            event.preventDefault();
+                            saveEdit(card.id);
+                          }}
+                        >
+                          <input
+                            aria-label={`Edit ${card.title}`}
+                            value={editingValue}
+                            onChange={(event) => setEditingValue(event.target.value)}
+                          />
+                          <div className="card-actions">
+                            <button type="submit">Save</button>
+                            <button type="button" onClick={cancelEdit}>
+                              Cancel
+                            </button>
+                          </div>
+                        </form>
+                      ) : (
+                        <>
+                          <p>{card.title}</p>
+                          <button type="button" onClick={() => startEdit(card)}>
+                            Edit
+                          </button>
+                        </>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </article>
+            ))}
+          </section>
+        </>
+      ) : (
+        <section className="login" aria-label="Sign in form">
+          <h2>Sign In</h2>
+          <form onSubmit={handleLogin}>
+            <label htmlFor="username">Username</label>
+            <input
+              id="username"
+              value={username}
+              onChange={(event) => setUsername(event.target.value)}
+              autoComplete="username"
+            />
+            <label htmlFor="password">Password</label>
+            <input
+              id="password"
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              autoComplete="current-password"
+            />
+            {authError ? <p className="error">{authError}</p> : null}
+            <button type="submit" className="primary">
+              Sign In
+            </button>
+          </form>
+        </section>
+      )}
     </main>
   );
 }
