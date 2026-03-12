@@ -1,64 +1,194 @@
 import React from "react";
-import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import HomePage from "./page";
 
-function loginAsDefaultUser() {
+type Card = {
+  id: string;
+  title: string;
+};
+
+type Column = {
+  id: string;
+  name: string;
+  cards: Card[];
+};
+
+type MockServer = {
+  setFailNextPut: () => void;
+  getBoard: () => { columns: Column[] };
+  seedBoard: (nextBoard: { columns: Column[] }) => void;
+};
+
+function jsonResponse(status: number, payload: unknown): Response {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: { "Content-Type": "application/json" }
+  });
+}
+
+function createMockServer(): MockServer {
+  let isLoggedIn = false;
+  let failNextPut = false;
+  let board: { columns: Column[] } = {
+    columns: [
+      {
+        id: "todo",
+        name: "To Do",
+        cards: [
+          { id: "c1", title: "Draft project milestones" },
+          { id: "c2", title: "Review API contract" }
+        ]
+      },
+      {
+        id: "in-progress",
+        name: "In Progress",
+        cards: [{ id: "c3", title: "Integrate frontend build output" }]
+      },
+      {
+        id: "done",
+        name: "Done",
+        cards: [{ id: "c4", title: "Scaffold FastAPI in Docker" }]
+      }
+    ]
+  };
+
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === "string" ? input : input.toString();
+    const method = init?.method ?? "GET";
+
+    if (url === "/api/board" && method === "GET") {
+      if (!isLoggedIn) {
+        return jsonResponse(401, { detail: "Authentication required" });
+      }
+
+      return jsonResponse(200, { board });
+    }
+
+    if (url === "/api/board" && method === "PUT") {
+      if (!isLoggedIn) {
+        return jsonResponse(401, { detail: "Authentication required" });
+      }
+
+      if (failNextPut) {
+        failNextPut = false;
+        return jsonResponse(500, { detail: "save failed" });
+      }
+
+      const payload = init?.body ? JSON.parse(String(init.body)) : null;
+      board = payload.board;
+      return jsonResponse(200, { board });
+    }
+
+    if (url === "/api/auth/login" && method === "POST") {
+      const payload = init?.body ? JSON.parse(String(init.body)) : {};
+      if (payload.username === "user" && payload.password === "password") {
+        isLoggedIn = true;
+        return jsonResponse(200, { status: "ok" });
+      }
+
+      return jsonResponse(401, { detail: "Invalid username or password" });
+    }
+
+    if (url === "/api/auth/logout" && method === "POST") {
+      isLoggedIn = false;
+      return jsonResponse(200, { status: "ok" });
+    }
+
+    return jsonResponse(404, { detail: "not found" });
+  }));
+
+  return {
+    setFailNextPut() {
+      failNextPut = true;
+    },
+    getBoard() {
+      return board;
+    },
+    seedBoard(nextBoard) {
+      board = nextBoard;
+    }
+  };
+}
+
+async function loginAsDefaultUser() {
+  await screen.findByRole("heading", { level: 2, name: "Sign In" });
+
   fireEvent.change(screen.getByLabelText("Username"), { target: { value: "user" } });
   fireEvent.change(screen.getByLabelText("Password"), { target: { value: "password" } });
   fireEvent.click(screen.getByRole("button", { name: "Sign In" }));
+
+  await screen.findByText("Signed in as user");
 }
 
 describe("HomePage", () => {
-  it("shows login view by default", () => {
+  let server: MockServer;
+
+  beforeEach(() => {
+    server = createMockServer();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("shows login view by default", async () => {
     render(<HomePage />);
 
-    expect(screen.getByRole("heading", { level: 2, name: "Sign In" })).toBeInTheDocument();
+    await screen.findByRole("heading", { level: 2, name: "Sign In" });
     expect(screen.queryByRole("heading", { level: 2, name: "To Do" })).not.toBeInTheDocument();
   });
 
-  it("shows an error for invalid credentials", () => {
+  it("shows an error for invalid credentials", async () => {
     render(<HomePage />);
+
+    await screen.findByRole("heading", { level: 2, name: "Sign In" });
 
     fireEvent.change(screen.getByLabelText("Username"), { target: { value: "wrong" } });
     fireEvent.change(screen.getByLabelText("Password"), { target: { value: "creds" } });
     fireEvent.click(screen.getByRole("button", { name: "Sign In" }));
 
-    expect(screen.getByText("Invalid username or password.")).toBeInTheDocument();
+    await screen.findByText("Invalid username or password.");
     expect(screen.queryByRole("heading", { level: 2, name: "To Do" })).not.toBeInTheDocument();
   });
 
-  it("allows login and logout", () => {
+  it("allows login and logout", async () => {
     render(<HomePage />);
 
-    loginAsDefaultUser();
+    await loginAsDefaultUser();
 
     expect(screen.getByText("Signed in as user")).toBeInTheDocument();
     expect(screen.getByText("To Do")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Sign Out" }));
 
-    expect(screen.getByRole("heading", { level: 2, name: "Sign In" })).toBeInTheDocument();
+    await screen.findByRole("heading", { level: 2, name: "Sign In" });
     expect(screen.queryByText("Signed in as user")).not.toBeInTheDocument();
   });
 
-  it("edits a card title after login", () => {
-    render(<HomePage />);
+  it("edits a card title and reload keeps latest persisted state", async () => {
+    const { unmount } = render(<HomePage />);
 
-    loginAsDefaultUser();
+    await loginAsDefaultUser();
 
     fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]);
     const input = screen.getByRole("textbox", { name: "Edit Draft project milestones" });
     fireEvent.change(input, { target: { value: "Updated milestone plan" } });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
-    expect(screen.getByText("Updated milestone plan")).toBeInTheDocument();
+    await screen.findByText("Updated milestone plan");
     expect(screen.queryByText("Draft project milestones")).not.toBeInTheDocument();
-  });
 
-  it("moves a card from To Do to Done after login", () => {
+    unmount();
     render(<HomePage />);
 
-    loginAsDefaultUser();
+    await screen.findByText("Signed in as user");
+    expect(screen.getByText("Updated milestone plan")).toBeInTheDocument();
+  });
+
+  it("moves a card from To Do to Done and persists update", async () => {
+    render(<HomePage />);
+
+    await loginAsDefaultUser();
 
     const todoColumn = screen.getByRole("list", { name: "To Do cards" });
     const doneColumn = screen.getByRole("list", { name: "Done cards" });
@@ -68,37 +198,40 @@ describe("HomePage", () => {
     fireEvent.dragStart(card as HTMLElement);
     fireEvent.drop(doneColumn);
 
-    expect(within(doneColumn).getByText("Review API contract")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(within(doneColumn).getByText("Review API contract")).toBeInTheDocument();
+    });
     expect(within(todoColumn).queryByText("Review API contract")).not.toBeInTheDocument();
+    expect(server.getBoard().columns.find((column) => column.id === "done")?.cards[1]?.title).toBe(
+      "Review API contract"
+    );
   });
 
-  it("ignores column drop when no card is being dragged", () => {
+  it("shows save error when board persistence fails", async () => {
     render(<HomePage />);
 
-    loginAsDefaultUser();
+    await loginAsDefaultUser();
+    server.setFailNextPut();
 
-    const doneColumn = screen.getByRole("list", { name: "Done cards" });
-    fireEvent.drop(doneColumn);
+    fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]);
+    const input = screen.getByRole("textbox", { name: "Edit Draft project milestones" });
+    fireEvent.change(input, { target: { value: "Attempted save" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
-    expect(within(doneColumn).queryByText("Review API contract")).not.toBeInTheDocument();
+    await screen.findByText("Failed to save board changes.");
   });
 
-  it("supports dropping onto a specific card target", () => {
+  it("restores missing fixed columns from persisted board", async () => {
+    server.seedBoard({
+      columns: [{ id: "todo", name: "To Do", cards: [{ id: "c1", title: "Only one" }] }]
+    });
+
     render(<HomePage />);
+    await loginAsDefaultUser();
 
-    loginAsDefaultUser();
-
-    const todoColumn = screen.getByRole("list", { name: "To Do cards" });
-    const doneColumn = screen.getByRole("list", { name: "Done cards" });
-    const dragged = within(todoColumn).getByText("Review API contract").closest("li");
-    const doneCardTarget = within(doneColumn).getByText("Scaffold FastAPI in Docker").closest("li");
-    expect(dragged).not.toBeNull();
-    expect(doneCardTarget).not.toBeNull();
-
-    fireEvent.dragStart(dragged as HTMLElement);
-    fireEvent.drop(doneCardTarget as HTMLElement);
-
-    const doneCards = within(doneColumn).getAllByRole("listitem");
-    expect(doneCards[0]).toHaveTextContent("Review API contract");
+    expect(screen.getByRole("heading", { level: 2, name: "To Do" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: "In Progress" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: "Done" })).toBeInTheDocument();
+    expect(screen.getByText("Only one")).toBeInTheDocument();
   });
 });

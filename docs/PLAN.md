@@ -14,7 +14,7 @@
 
 Current status: Complete (approved on 2026-03-09)
 
-Progress update: Parts 1-6 complete (Part 5 approved on 2026-03-11, Part 6 completed on 2026-03-11)
+Progress update: Parts 1-7 complete (Part 5 approved on 2026-03-11, Part 6 completed on 2026-03-11, Part 7 completed on 2026-03-11)
 
 Approved decisions:
 
@@ -166,22 +166,22 @@ Approved decisions:
 
 ### Checklist
 
-- [ ] Replace frontend in-memory state with backend-backed state fetch/save
-- [ ] Add loading and error handling for board read/write operations
-- [ ] Ensure drag/drop and edits trigger persistence updates
-- [ ] Keep UX responsive and avoid data loss on rapid edits
+- [x] Replace frontend in-memory state with backend-backed state fetch/save
+- [x] Add loading and error handling for board read/write operations
+- [x] Ensure drag/drop and edits trigger persistence updates
+- [x] Keep UX responsive and avoid data loss on rapid edits
 
 ### Tests
 
-- [ ] Frontend unit tests for API client and state update logic
-- [ ] Integration tests for create/edit/move card flows with backend persistence
-- [ ] Integration tests for refresh/reload retaining latest board state
+- [x] Frontend unit tests for API client and state update logic
+- [x] Integration tests for create/edit/move card flows with backend persistence
+- [x] Integration tests for refresh/reload retaining latest board state
 
 ### Success Criteria
 
-- [ ] UI operations persist reliably to backend
-- [ ] Reload reflects latest saved board state
-- [ ] Unit coverage remains meaningful for changed behavior (target ~80% when sensible)
+- [x] UI operations persist reliably to backend
+- [x] Reload reflects latest saved board state
+- [x] Unit coverage remains meaningful for changed behavior (target ~80% when sensible)
 
 ## Part 8: AI Connectivity (OpenRouter)
 

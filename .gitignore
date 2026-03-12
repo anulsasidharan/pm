@@ -23,6 +23,7 @@ share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+frontend/node_modules/
 MANIFEST
 
 # PyInstaller

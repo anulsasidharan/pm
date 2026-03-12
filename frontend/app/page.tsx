@@ -1,75 +1,138 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 
-type Card = {
-  id: string;
-  title: string;
-};
+import { ApiError, type Card, type Column, fetchBoard, login, logout, saveBoard } from "./api";
 
-type Column = {
-  id: string;
-  name: string;
-  cards: Card[];
-};
-
-const initialColumns: Column[] = [
-  {
-    id: "todo",
-    name: "To Do",
-    cards: [
-      { id: "c1", title: "Draft project milestones" },
-      { id: "c2", title: "Review API contract" }
-    ]
-  },
-  {
-    id: "in-progress",
-    name: "In Progress",
-    cards: [{ id: "c3", title: "Integrate frontend build output" }]
-  },
-  {
-    id: "done",
-    name: "Done",
-    cards: [{ id: "c4", title: "Scaffold FastAPI in Docker" }]
-  }
+const DEFAULT_COLUMNS: Column[] = [
+  { id: "todo", name: "To Do", cards: [] },
+  { id: "in-progress", name: "In Progress", cards: [] },
+  { id: "done", name: "Done", cards: [] }
 ];
 
-const AUTH_STORAGE_KEY = "pm-authenticated";
-const HARDCODED_USER = "user";
-const HARDCODED_PASSWORD = "password";
+function normalizeColumns(columns: Column[]): Column[] {
+  const byId = new Map(columns.map((column) => [column.id, column]));
+
+  return DEFAULT_COLUMNS.map((fallback) => {
+    const existing = byId.get(fallback.id);
+    return existing
+      ? {
+          ...existing,
+          cards: Array.isArray(existing.cards) ? existing.cards : []
+        }
+      : {
+          ...fallback,
+          cards: []
+        };
+  });
+}
 
 export default function HomePage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isInitializing, setIsInitializing] = useState(true);
+  const [isBoardLoading, setIsBoardLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [authError, setAuthError] = useState("");
-  const [columns, setColumns] = useState<Column[]>(initialColumns);
+  const [boardError, setBoardError] = useState("");
+  const [columns, setColumns] = useState<Column[]>(DEFAULT_COLUMNS);
   const [draggingCardId, setDraggingCardId] = useState<string | null>(null);
   const [editingCardId, setEditingCardId] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState("");
+  const pendingSaveCountRef = useRef(0);
+  const saveQueueRef = useRef(Promise.resolve());
+  const draggingCardIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (window.localStorage.getItem(AUTH_STORAGE_KEY) === "1") {
-      setIsAuthenticated(true);
+    let isMounted = true;
+
+    async function bootstrapSession() {
+      setBoardError("");
+
+      try {
+        const board = await fetchBoard();
+        if (!isMounted) {
+          return;
+        }
+
+        const normalizedColumns = normalizeColumns(board.columns);
+        setIsAuthenticated(true);
+        setColumns(normalizedColumns);
+
+        // Auto-heal persisted board shape when fixed columns are missing.
+        if (JSON.stringify(normalizedColumns) !== JSON.stringify(board.columns)) {
+          await saveBoard({ columns: normalizedColumns });
+        }
+      } catch (error) {
+        if (!isMounted) {
+          return;
+        }
+
+        if (error instanceof ApiError && error.status === 401) {
+          setIsAuthenticated(false);
+          setColumns(DEFAULT_COLUMNS);
+          return;
+        }
+
+        setBoardError("Unable to load board right now.");
+      } finally {
+        if (isMounted) {
+          setIsInitializing(false);
+        }
+      }
     }
+
+    void bootstrapSession();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
-  const draggingSource = useMemo(() => {
-    if (!draggingCardId) {
-      return null;
-    }
-
+  function findDraggingSource(cardId: string): { columnId: string; index: number } | null {
     for (const column of columns) {
-      const index = column.cards.findIndex((card) => card.id === draggingCardId);
+      const index = column.cards.findIndex((card) => card.id === cardId);
       if (index !== -1) {
         return { columnId: column.id, index };
       }
     }
 
     return null;
-  }, [columns, draggingCardId]);
+  }
 
-  function startEdit(card: Card) {
+  function queueBoardSave(nextColumns: Column[]) {
+    pendingSaveCountRef.current += 1;
+    setIsSaving(true);
+    setBoardError("");
+
+    saveQueueRef.current = saveQueueRef.current
+      .then(async () => {
+        await saveBoard({ columns: nextColumns });
+      })
+      .catch(() => {
+        setBoardError("Failed to save board changes.");
+      })
+      .finally(() => {
+        pendingSaveCountRef.current -= 1;
+        if (pendingSaveCountRef.current <= 0) {
+          setIsSaving(false);
+        }
+      });
+  }
+
+  function applyColumnsUpdate(updater: (prev: Column[]) => Column[]) {
+    setColumns((prev) => {
+      const next = updater(prev);
+      if (next !== prev && isAuthenticated) {
+        queueBoardSave(next);
+      }
+
+      return next;
+    });
+  }
+
+  function startEdit(card: { id: string; title: string }) {
     setEditingCardId(card.id);
     setEditingValue(card.title);
   }
@@ -85,7 +148,7 @@ export default function HomePage() {
       return;
     }
 
-    setColumns((prev) =>
+    applyColumnsUpdate((prev) =>
       prev.map((column) => ({
         ...column,
         cards: column.cards.map((card) => (card.id === cardId ? { ...card, title: trimmed } : card))
@@ -95,7 +158,7 @@ export default function HomePage() {
   }
 
   function moveCard(cardId: string, targetColumnId: string, targetIndex: number) {
-    setColumns((prev) => {
+    applyColumnsUpdate((prev) => {
       let movingCard: Card | null = null;
 
       const withoutCard = prev.map((column) => {
@@ -133,48 +196,104 @@ export default function HomePage() {
     });
   }
 
-  function handleCardDrop(targetColumnId: string, targetIndex: number) {
-    if (!draggingCardId || !draggingSource) {
-      return;
+  function getDraggedCardIdFromEvent(event?: React.DragEvent): string | null {
+    if (draggingCardIdRef.current) {
+      return draggingCardIdRef.current;
     }
 
-    const sameColumn = draggingSource.columnId === targetColumnId;
-    const adjustedIndex = sameColumn && draggingSource.index < targetIndex ? targetIndex - 1 : targetIndex;
-    moveCard(draggingCardId, targetColumnId, adjustedIndex);
-    setDraggingCardId(null);
+    const transferred = event?.dataTransfer?.getData("text/plain");
+    return transferred || draggingCardId;
   }
 
-  function handleColumnDrop(targetColumnId: string, targetLength: number) {
-    if (!draggingCardId) {
-      return;
-    }
-
-    moveCard(draggingCardId, targetColumnId, targetLength);
-    setDraggingCardId(null);
-  }
-
-  function handleLogin(event: React.FormEvent<HTMLFormElement>) {
+  function handleCardDrop(event: React.DragEvent, targetColumnId: string, targetIndex: number) {
     event.preventDefault();
 
-    if (username === HARDCODED_USER && password === HARDCODED_PASSWORD) {
-      setIsAuthenticated(true);
-      setAuthError("");
-      window.localStorage.setItem(AUTH_STORAGE_KEY, "1");
+    const activeCardId = getDraggedCardIdFromEvent(event);
+    if (!activeCardId) {
       return;
     }
 
-    setAuthError("Invalid username or password.");
+    const source = findDraggingSource(activeCardId);
+    if (!source) {
+      return;
+    }
+
+    const sameColumn = source.columnId === targetColumnId;
+    const adjustedIndex = sameColumn && source.index < targetIndex ? targetIndex - 1 : targetIndex;
+    moveCard(activeCardId, targetColumnId, adjustedIndex);
+    draggingCardIdRef.current = null;
+    setDraggingCardId(null);
   }
 
-  function handleLogout() {
+  function handleColumnDrop(event: React.DragEvent, targetColumnId: string, targetLength: number) {
+    event.preventDefault();
+
+    const activeCardId = getDraggedCardIdFromEvent(event);
+    if (!activeCardId) {
+      return;
+    }
+
+    moveCard(activeCardId, targetColumnId, targetLength);
+    draggingCardIdRef.current = null;
+    setDraggingCardId(null);
+  }
+
+  async function loadBoardFromBackend() {
+    setIsBoardLoading(true);
+    setBoardError("");
+
+    try {
+      const board = await fetchBoard();
+      const normalizedColumns = normalizeColumns(board.columns);
+      setColumns(normalizedColumns);
+
+      if (JSON.stringify(normalizedColumns) !== JSON.stringify(board.columns)) {
+        await saveBoard({ columns: normalizedColumns });
+      }
+    } catch {
+      setBoardError("Unable to load board right now.");
+    } finally {
+      setIsBoardLoading(false);
+    }
+  }
+
+  async function handleLogin(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setAuthError("");
+
+    try {
+      await login({ username, password });
+      setIsAuthenticated(true);
+      await loadBoardFromBackend();
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        setAuthError("Invalid username or password.");
+        return;
+      }
+
+      setAuthError("Unable to sign in right now.");
+    }
+  }
+
+  async function handleLogout() {
+    try {
+      await logout();
+    } catch {
+      // Keep client state reset even if logout call fails.
+    }
+
     setIsAuthenticated(false);
     setUsername("");
     setPassword("");
     setAuthError("");
+    setBoardError("");
     setDraggingCardId(null);
     setEditingCardId(null);
     setEditingValue("");
-    window.localStorage.removeItem(AUTH_STORAGE_KEY);
+    setColumns(DEFAULT_COLUMNS);
+    setIsSaving(false);
+    pendingSaveCountRef.current = 0;
+    saveQueueRef.current = Promise.resolve();
   }
 
   return (
@@ -188,21 +307,43 @@ export default function HomePage() {
         </p>
       </header>
 
-      {isAuthenticated ? (
+      {isInitializing ? (
+        <p className="sub">Checking session...</p>
+      ) : isAuthenticated ? (
         <>
           <div className="session-row">
             <p className="sub">Signed in as user</p>
-            <button type="button" className="primary" onClick={handleLogout}>
+            <button type="button" className="primary" onClick={() => void handleLogout()}>
               Sign Out
             </button>
           </div>
+          <div className="status-row" aria-live="polite">
+            {isBoardLoading ? <p className="sub">Loading board...</p> : null}
+            {isSaving ? <p className="sub">Saving changes...</p> : null}
+            {boardError ? <p className="error">{boardError}</p> : null}
+          </div>
           <section className="board" aria-label="Kanban board">
             {columns.map((column) => (
-              <article key={column.id} className="column">
+              <article
+                key={column.id}
+                className="column"
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  if (event.dataTransfer) {
+                    event.dataTransfer.dropEffect = "move";
+                  }
+                }}
+                onDrop={(event) => handleColumnDrop(event, column.id, column.cards.length)}
+              >
                 <h2>{column.name}</h2>
                 <ul
-                  onDragOver={(event) => event.preventDefault()}
-                  onDrop={() => handleColumnDrop(column.id, column.cards.length)}
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                    if (event.dataTransfer) {
+                      event.dataTransfer.dropEffect = "move";
+                    }
+                  }}
+                  onDrop={(event) => handleColumnDrop(event, column.id, column.cards.length)}
                   aria-label={`${column.name} cards`}
                 >
                   {column.cards.map((card, index) => (
@@ -210,12 +351,28 @@ export default function HomePage() {
                       key={card.id}
                       className="card"
                       draggable
-                      onDragStart={() => setDraggingCardId(card.id)}
-                      onDragEnd={() => setDraggingCardId(null)}
-                      onDragOver={(event) => event.preventDefault()}
+                      onDragStart={(event) => {
+                        event.dataTransfer?.setData("text/plain", card.id);
+                        if (event.dataTransfer) {
+                          event.dataTransfer.effectAllowed = "move";
+                        }
+                        draggingCardIdRef.current = card.id;
+                        setDraggingCardId(card.id);
+                      }}
+                      onDragEnd={() => {
+                        draggingCardIdRef.current = null;
+                        setDraggingCardId(null);
+                      }}
+                      onDragOver={(event) => {
+                        event.preventDefault();
+                        if (event.dataTransfer) {
+                          event.dataTransfer.dropEffect = "move";
+                        }
+                      }}
                       onDrop={(event) => {
+                        event.preventDefault();
                         event.stopPropagation();
-                        handleCardDrop(column.id, index);
+                        handleCardDrop(event, column.id, index);
                       }}
                     >
                       {editingCardId === card.id ? (
@@ -256,7 +413,7 @@ export default function HomePage() {
       ) : (
         <section className="login" aria-label="Sign in form">
           <h2>Sign In</h2>
-          <form onSubmit={handleLogin}>
+          <form onSubmit={(event) => void handleLogin(event)}>
             <label htmlFor="username">Username</label>
             <input
               id="username"

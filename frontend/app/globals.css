@@ -46,6 +46,14 @@ body {
   margin-bottom: 0.8rem;
 }
 
+.status-row {
+  display: flex;
+  gap: 0.8rem;
+  align-items: center;
+  min-height: 1.2rem;
+  margin-bottom: 0.8rem;
+}
+
 .primary {
   border: 1px solid var(--purple-secondary);
   border-radius: 6px;
