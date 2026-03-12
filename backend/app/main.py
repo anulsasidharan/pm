@@ -6,9 +6,17 @@ from fastapi import Depends, FastAPI, HTTPException, Response, status
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 
+from app.ai import AIConfigError, AIUpstreamError, OPENROUTER_MODEL, run_connectivity_check
 from app.auth import clear_session_cookie, require_authenticated_username, set_session_cookie
 from app.db import get_board_json, initialize_database, save_board_json
-from app.schemas import Board, BoardResponse, BoardUpdateRequest, LoginRequest
+from app.schemas import (
+    AiConnectivityRequest,
+    AiConnectivityResponse,
+    Board,
+    BoardResponse,
+    BoardUpdateRequest,
+    LoginRequest,
+)
 
 HARDCODED_USER = "user"
 HARDCODED_PASSWORD = "password"
@@ -71,6 +79,22 @@ def update_board(
     # Persist validated board payload for the signed-in user.
     save_board_json(username, json.dumps(payload.board.model_dump()))
     return BoardResponse(board=payload.board)
+
+
+@app.post("/api/ai/check", response_model=AiConnectivityResponse)
+def ai_connectivity_check(
+    payload: AiConnectivityRequest,
+    username: str = Depends(require_authenticated_username),
+) -> AiConnectivityResponse:
+    _ = username
+    try:
+        reply = run_connectivity_check(payload.prompt)
+    except AIConfigError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+    except AIUpstreamError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+    return AiConnectivityResponse(model=OPENROUTER_MODEL, reply=reply)
 
 
 static_dir = Path(__file__).resolve().parent / "static"

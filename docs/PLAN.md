@@ -14,7 +14,7 @@
 
 Current status: Complete (approved on 2026-03-09)
 
-Progress update: Parts 1-7 complete (Part 5 approved on 2026-03-11, Part 6 completed on 2026-03-11, Part 7 completed on 2026-03-11)
+Progress update: Parts 1-8 complete (Part 5 approved on 2026-03-11, Part 6 completed on 2026-03-11, Part 7 completed on 2026-03-11, Part 8 completed on 2026-03-12)
 
 Approved decisions:
 
@@ -187,22 +187,22 @@ Approved decisions:
 
 ### Checklist
 
-- [ ] Add backend AI client using `OPENROUTER_API_KEY` from `.env`
-- [ ] Configure model `openai/gpt-oss-120b`
-- [ ] Add backend endpoint to run connectivity check prompt
-- [ ] Implement retry/timeouts with simple MVP-safe behavior
+- [x] Add backend AI client using `OPENROUTER_API_KEY` from `.env`
+- [x] Configure model `openai/gpt-oss-120b`
+- [x] Add backend endpoint to run connectivity check prompt
+- [x] Implement retry/timeouts with simple MVP-safe behavior
 
 ### Tests
 
-- [ ] Unit tests for AI client request construction and error mapping
-- [ ] Integration smoke test for AI endpoint with prompt `2+2`
-- [ ] Integration test for missing/invalid API key behavior
+- [x] Unit tests for AI client request construction and error mapping
+- [x] Integration smoke test for AI endpoint with prompt `2+2`
+- [x] Integration test for missing/invalid API key behavior
 
 ### Success Criteria
 
-- [ ] AI endpoint returns valid response for connectivity prompt
-- [ ] Errors are actionable and do not crash the app
-- [ ] Unit coverage remains meaningful for changed behavior (target ~80% when sensible)
+- [x] AI endpoint returns valid response for connectivity prompt
+- [x] Errors are actionable and do not crash the app
+- [x] Unit coverage remains meaningful for changed behavior (target ~80% when sensible)
 
 ## Part 9: Structured AI Board Operations
 

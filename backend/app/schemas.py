@@ -29,3 +29,12 @@ class BoardResponse(BaseModel):
 
 class BoardUpdateRequest(BaseModel):
     board: Board
+
+
+class AiConnectivityRequest(BaseModel):
+    prompt: str = Field(default="2+2", min_length=1, max_length=2000)
+
+
+class AiConnectivityResponse(BaseModel):
+    model: str
+    reply: str
