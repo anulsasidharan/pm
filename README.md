@@ -186,7 +186,6 @@ This modular structure allows the system to scale easily while keeping component
 
 ## 🎥 Demo
 
-*(Add demo GIF or video here later)*
 ![alt text](Animation.gif)
 
 
